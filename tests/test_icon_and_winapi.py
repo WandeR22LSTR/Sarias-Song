@@ -61,6 +61,27 @@ def test_monitor_rects_empty_off_windows(monkeypatch):
     assert winapi.monitor_rects() == []
 
 
+def test_foreground_and_topmost_helpers_are_no_ops_off_windows(monkeypatch):
+    monkeypatch.setattr(winapi, "IS_WINDOWS", False)
+    winapi.allow_set_foreground(1)
+    winapi.bring_to_front(1)
+    winapi.make_topmost(1, 0, 0, 100, 100)
+    winapi.set_dpi_aware()
+
+
+def test_foreground_and_topmost_calls_on_windows(monkeypatch):
+    monkeypatch.setattr(winapi, "IS_WINDOWS", True)
+    user32 = mock.Mock()
+    with mock.patch.object(winapi.ctypes, "windll", mock.Mock(user32=user32), create=True):
+        winapi.allow_set_foreground(4321)
+        winapi.bring_to_front(99)
+        winapi.make_topmost(99, -1280, 0, 3200, 1080)
+    user32.AllowSetForegroundWindow.assert_called_once_with(4321)
+    user32.SetForegroundWindow.assert_called_once()
+    args = user32.SetWindowPos.call_args.args
+    assert args[2:6] == (-1280, 0, 3200, 1080)  # exact rectangle, negative origin preserved
+
+
 def test_dpi_awareness_prefers_per_monitor_v2(monkeypatch):
     monkeypatch.setattr(winapi, "IS_WINDOWS", True)
     user32 = mock.Mock()

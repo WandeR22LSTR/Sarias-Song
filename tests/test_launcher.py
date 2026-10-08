@@ -72,6 +72,26 @@ def test_second_click_while_running_does_not_start_another(log):
     assert len(popen_calls) == 1
 
 
+def test_start_hands_foreground_rights_to_the_saver(log, monkeypatch):
+    # Without this Windows may refuse to give the new window the keyboard, and
+    # key presses would go to the window behind the saver instead of closing it.
+    granted = []
+    monkeypatch.setattr(launcher.winapi, "allow_set_foreground", lambda pid: granted.append(pid))
+    sl = launcher.SaverLauncher(log, popen=lambda cmd, **kw: FakeProc(pid=777))
+    assert sl.start() is True
+    assert granted == [777]
+
+
+def test_failing_foreground_grant_does_not_stop_the_saver(log, monkeypatch):
+    def deny(pid):
+        raise OSError("denied")
+
+    monkeypatch.setattr(launcher.winapi, "allow_set_foreground", deny)
+    sl = launcher.SaverLauncher(log, popen=lambda cmd, **kw: FakeProc())
+    assert sl.start() is True
+    assert sl.is_running()
+
+
 def test_can_start_again_after_saver_exits(log):
     procs = [FakeProc(returncode=0), FakeProc()]
     sl = launcher.SaverLauncher(log, popen=lambda cmd, **kw: procs.pop(0))
