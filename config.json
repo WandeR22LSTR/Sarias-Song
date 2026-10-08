@@ -1,0 +1,25 @@
+{
+  "mode": "clock",
+  "colors": {
+    "background": "#0b1410",
+    "background_edge": "#040806",
+    "accent": "#7fd48a",
+    "text": "#cfe8d4",
+    "dim": "#5f8a68"
+  },
+  "font": "Segoe UI Light, Segoe UI, Calibri",
+  "clock": {
+    "format_24h": true,
+    "show_seconds": false,
+    "show_date": true
+  },
+  "animation_speed": 1.0,
+  "monitors": "all",
+  "grace_seconds": 2.0,
+  "exit_on": [
+    "key",
+    "mouse_move",
+    "mouse_click"
+  ],
+  "mouse_move_threshold_px": 12
+}

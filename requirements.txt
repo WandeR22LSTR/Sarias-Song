@@ -1,0 +1,5 @@
+# Runtime dependencies, pinned so Spirit Temple matches the cloud session.
+# Python 3.13 (64-bit) is the supported version, see README.
+pygame==2.6.1
+pystray==0.19.5
+Pillow==12.3.0
