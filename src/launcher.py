@@ -17,6 +17,7 @@ from typing import Callable
 
 import applog
 import config
+import winapi
 from winapi import IS_WINDOWS
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -69,6 +70,10 @@ class SaverLauncher:
                 self._log.exception("could not start the saver")
                 self._proc = None
                 return False
+            try:
+                winapi.allow_set_foreground(self._proc.pid)
+            except Exception:
+                self._log.exception("could not grant the saver foreground rights")
             self._log.info("saver started (pid %s)", self._proc.pid)
             threading.Thread(target=self._reap, args=(self._proc,), daemon=True).start()
             return True

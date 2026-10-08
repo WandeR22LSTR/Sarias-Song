@@ -120,6 +120,26 @@ def monitor_rects() -> list[MonitorRect]:
     return found
 
 
+def allow_set_foreground(pid: int) -> None:
+    """Let another process take the foreground (called by the tray for the saver).
+
+    Windows blocks a freshly started process from stealing focus. The tray has
+    just received the user's click, so it is allowed to hand that right on. Without
+    it the saver can appear but not get the keyboard, and a key press would
+    go to the window behind it instead of closing the saver.
+    """
+    if not IS_WINDOWS:
+        return
+    ctypes.windll.user32.AllowSetForegroundWindow(pid)
+
+
+def bring_to_front(hwnd: int) -> None:
+    """Give a window keyboard focus (the saver calls this on its own window)."""
+    if not IS_WINDOWS:
+        return
+    ctypes.windll.user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+
+
 def make_topmost(hwnd: int, x: int, y: int, width: int, height: int) -> None:
     """Pin a window above the taskbar at an exact rectangle.
 
