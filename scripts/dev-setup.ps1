@@ -22,27 +22,55 @@ $WantedVersion = "3.13"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-# Prefer the py launcher so we get 3.13 even if another Python is first on PATH.
-# $PyExe plus the splatted $PyArgs (possibly empty) avoids passing a $null argument.
-$PyExe = $null
-$PyArgs = @()
-if (Get-Command py -ErrorAction SilentlyContinue) {
+# Ask an interpreter for its "major.minor" version. Returns $null unless it really
+# ran and answered. This matters on Windows 10/11: with no Python installed,
+# `python` is still a Microsoft Store placeholder that prints "Python was not found"
+# instead of running, so "the command exists" is not proof that Python exists.
+function Get-PythonVersion {
+    param([string]$Exe, [string[]]$ExeArgs)
     try {
-        & py "-$WantedVersion" -c "import sys" 2>$null
-        if ($LASTEXITCODE -eq 0) { $PyExe = "py"; $PyArgs = @("-$WantedVersion") }
+        $out = & $Exe @ExeArgs -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $text = ("$out").Trim()
+            if ($text -match '^\d+\.\d+$') { return $text }
+        }
     }
     catch {
-        # py exists but has no 3.13: fall through to plain python.
+        # Not runnable: treat as "no such Python".
     }
-}
-if (-not $PyExe) {
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        throw "Python not found. Install Python $WantedVersion (64-bit) from python.org, then run this again."
-    }
-    $PyExe = "python"
+    return $null
 }
 
-$found = (& $PyExe @PyArgs -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
+# Candidates in order of preference: the py launcher pinned to 3.13, then any py 3, then python.
+$candidates = @(
+    @{ Exe = "py"; Args = @("-$WantedVersion") },
+    @{ Exe = "py"; Args = @("-3") },
+    @{ Exe = "python"; Args = @() }
+)
+
+$PyExe = $null
+$PyArgs = @()
+$found = $null
+foreach ($c in $candidates) {
+    if (-not (Get-Command $c.Exe -ErrorAction SilentlyContinue)) { continue }
+    $version = Get-PythonVersion -Exe $c.Exe -ExeArgs $c.Args
+    if (-not $version) { continue }
+    if (-not $found -or $version -eq $WantedVersion) {
+        $PyExe = $c.Exe; $PyArgs = $c.Args; $found = $version
+    }
+    if ($found -eq $WantedVersion) { break }
+}
+
+if (-not $found) {
+    throw @"
+No working Python found. (If you saw 'Python was not found; run without arguments to
+install from the Microsoft Store', that is only a placeholder, Python itself is not installed.)
+
+Install Python $WantedVersion (64-bit), then CLOSE and reopen PowerShell and run this again:
+    winget install -e --id Python.Python.$WantedVersion
+or download it from https://www.python.org/downloads/ and tick 'Add python.exe to PATH'.
+"@
+}
 if ($found -ne $WantedVersion) {
     Write-Warning "Python $found found, but this project is developed and tested on $WantedVersion. It may still work; if something odd happens, install $WantedVersion."
 }
@@ -51,7 +79,7 @@ $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path $VenvPython)) {
     Write-Host "Creating .venv with Python $found ..."
     & $PyExe @PyArgs -m venv .venv
-    if ($LASTEXITCODE -ne 0) { throw "Could not create the virtual environment." }
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPython)) { throw "Could not create the virtual environment." }
 }
 else {
     Write-Host ".venv already exists, updating it."
@@ -62,6 +90,10 @@ $requirements = if ($Dev) { "requirements-dev.txt" } else { "requirements.txt" }
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 & $VenvPython -m pip install -r $requirements
 if ($LASTEXITCODE -ne 0) { throw "Installing $requirements failed." }
+
+# Prove the install is usable before saying "Done".
+& $VenvPython -c "import pygame, pystray, PIL"
+if ($LASTEXITCODE -ne 0) { throw "The packages installed but could not be imported." }
 
 Write-Host ""
 Write-Host "Done. Run the tray app with:" -ForegroundColor Green

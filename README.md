@@ -32,6 +32,10 @@ The full brief is in [`docs/handoffs/saria-song-handoff.md`](docs/handoffs/saria
 
 ## Quick start (PowerShell)
 
+Install Python 3.13 first if you have not: `winget install -e --id Python.Python.3.13`, then
+**close and reopen PowerShell**. Use a normal (not "Run as administrator") window and a normal
+folder such as `$HOME\Projects`, not `C:\Windows\System32`.
+
 ```powershell
 git clone https://github.com/WandeR22LSTR/Sarias-Song.git
 cd Sarias-Song
@@ -185,3 +189,6 @@ the relevant `logs\*.log` lines, or just "works").
 * **Multi-monitor looks wrong** (offset, blurry, wrong scaling on a second display): set `"monitors": "primary"`
   and report your monitor arrangement and scaling.
 * **PowerShell refuses to run the script:** use the `powershell -ExecutionPolicy Bypass -File ...` form shown above.
+* **"Python was not found; run without arguments to install from the Microsoft Store":** that is Windows'
+  placeholder `python.exe`, meaning Python is not installed. Install 3.13 (see Quick start) and reopen PowerShell.
+  `dev-setup.ps1` detects this and tells you.
