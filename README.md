@@ -13,14 +13,14 @@ on the Ice Cavern hub.
 > both monitors (one at negative coordinates) and hiding the taskbar; Segoe UI Light; exit on a
 > key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
 > on a double-click; and, after fixes, no visible banding on the 1440p monitor and a clock that
-> stays put as its digits change. Not yet confirmed:
-> second-instance guard, Exit, autostart, streaming and the 8-hour soak
+> stays put as its digits change; the second-instance guard and Exit. Not yet confirmed:
+> autostart, streaming and the 8-hour soak
 > (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
 | --- | --- | --- |
-| 1 | Tray skeleton: icon, menu, autostart | icon, tooltip, menu, Settings confirmed; Exit, second instance and autostart still to test |
+| 1 | Tray skeleton: icon, menu, autostart | icon, tooltip, menu, Settings, Exit and the second-instance guard confirmed; autostart still to test |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
 | 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | not started |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
@@ -186,8 +186,10 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] Right-click shows **Start screensaver / Settings / Exit**.
 - [x] **Settings** opens `config.json` in Notepad.
 - [x] Editing `config.json` (e.g. `clock.show_seconds`) changes the next saver launch, with no code edits.
-- [ ] Starting `tray.py` a second time does not create a second icon.
-- [ ] **Exit** removes the icon and the `pythonw`/`python` process ends.
+- [x] Starting `tray.py` a second time does not create a second icon. (`tray.log`: `another tray instance is
+      already running; exiting`; the guard returns before any icon code runs.)
+- [x] **Exit** removes the icon and the `pythonw`/`python` process ends. (`tray.log`: `tray stopped`;
+      `Get-Process python, pythonw` printed nothing afterwards.)
 - [ ] `--install-autostart`, then sign out and in: the icon is back, and "Saria's Song" is listed in
       Task Manager > Startup apps. `--uninstall-autostart` removes it.
 
