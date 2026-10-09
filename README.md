@@ -8,16 +8,18 @@ Part of Luca's Ocarina-of-Time-themed project family. Standalone, with no depend
 on the Ice Cavern hub.
 
 > **Status: phases 1 and 2 are running on Spirit Temple; the checklist is partly ticked.**
-> Confirmed so far (Luca, 2026-10-08, from screenshots and `logs\*.log`): the tray icon
-> appears, the saver covers both monitors (one at negative coordinates), hides the
-> taskbar, uses Segoe UI Light, starts in about 0.25 s, and exits cleanly on a key press or
-> mouse move. Not yet confirmed: the menu items, second-instance guard, autostart, click-to-exit,
-> streaming, CPU use and the long soak. See the
+> Confirmed so far (Luca, 2026-10-08/09, from screenshots, `logs\*.log` and testing): the tray icon,
+> tooltip, menu and Settings; config changes applying on the next launch; the saver covering
+> both monitors (one at negative coordinates) and hiding the taskbar; Segoe UI Light; exit on a
+> key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
+> on a double-click; and, after fixes, no visible banding on the 1440p monitor. Not yet confirmed:
+> firefly motion, desktop restored after exit, second-instance guard, Exit, autostart, streaming, CPU
+> use and the long soak. See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
 | --- | --- | --- |
-| 1 | Tray skeleton: icon, menu, autostart | icon confirmed; menu items and autostart still to test |
+| 1 | Tray skeleton: icon, menu, autostart | icon, tooltip, menu, Settings confirmed; Exit, second instance and autostart still to test |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
 | 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | not started |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
@@ -156,9 +158,10 @@ the relevant `logs\*.log` lines, or just "works").
 
 **Tray (phase 1)**
 - [x] A green music note appears in the tray (maybe under the `^` overflow); it is legible on the dark taskbar.
-- [ ] Hovering shows "Saria's Song".
-- [ ] Right-click shows **Start screensaver / Settings / Exit**.
-- [ ] **Settings** opens `config.json` in Notepad.
+- [x] Hovering shows "Saria's Song".
+- [x] Right-click shows **Start screensaver / Settings / Exit**.
+- [x] **Settings** opens `config.json` in Notepad.
+- [x] Editing `config.json` (e.g. `clock.show_seconds`) changes the next saver launch, with no code edits.
 - [ ] Starting `tray.py` a second time does not create a second icon.
 - [ ] **Exit** removes the icon and the `pythonw`/`python` process ends.
 - [ ] `--install-autostart`, then sign out and in: the icon is back, and "Saria's Song" is listed in
@@ -170,12 +173,13 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] Text is sharp, not blurry (DPI scaling is handled). The display scaling % was not reported.
 - [x] Clock font: the thin Segoe UI Light look. (Log: `C:\WINDOWS\Fonts\segoeuil.ttf`.)
 - [ ] Fireflies drift slowly and smoothly; no tearing, stutter or visible trails.
-- [ ] Moving the mouse or pressing keys during the first 2 seconds does nothing.
+- [x] Moving the mouse or pressing keys during the first 2 seconds does nothing.
 - [x] After 2 seconds a **key press** exits (this checks that the saver really got keyboard focus) and so does a
       **real mouse move**. (Log: `exit on key`, `exit on mouse_move`.)
-- [ ] A **click** exits, and a tiny 1-2 pixel nudge does not.
+- [x] A **click** exits, and a tiny 1-2 pixel nudge does not.
 - [ ] After exit, windows and the taskbar are exactly as before, and no `python` process remains in Task Manager.
-- [ ] Clicking the tray icon again while the saver is up does not stack a second saver.
+- [x] Double-clicking the tray icon starts only one saver. (The tray is hidden once the saver is up, so
+      a second click can only happen in the first fraction of a second.)
 - [ ] Streamed via Apollo/Artemis: the saver shows on the stream and input from the client exits it.
 - [ ] Note the saver's CPU % in Task Manager after a minute (not measured on Windows yet; the design
       aims for low single digits, but please report the real number and your monitor setup).
