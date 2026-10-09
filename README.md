@@ -220,9 +220,17 @@ The saver holds `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` wh
 clears it on exit (`logs\saver.log`: `keep-awake on` / `keep-awake off`). It blocks idle sleep only. It
 does not force the monitors on, and does not touch power plans or the registry. A crash releases it
 automatically (Windows drops the request when the thread dies).
-- [ ] **Quick proof it is in effect.** In an administrator PowerShell, while the saver is up, run
-      `powercfg /requests`. A `python.exe` / `pythonw.exe` entry (this repo's `.venv`) should appear under
-      SYSTEM. Exit the saver and run it again: the entry should be gone.
+- [ ] **Quick proof it is in effect.** The saver covers the screen and any input closes it, so you cannot
+      type while it is up: start a delayed snapshot first, then launch the saver. In an **administrator**
+      PowerShell run `Start-Sleep 25; powercfg /requests | Out-File $HOME\requests-during.txt`, then click the
+      tray icon and leave the PC alone for 35 seconds before pressing a key. Afterwards
+      `Get-Content $HOME\requests-during.txt` should show a `python.exe` / `pythonw.exe` entry (the `.venv`
+      Python) under **SYSTEM**, and **no** entry under DISPLAY. A plain `powercfg /requests` after the saver
+      has closed should show neither. (Other programs, such as a torrent client, may add their own entries.)
+      *First run on Spirit Temple (2026-10-09) found the entry under DISPLAY and nothing under SYSTEM:
+      SDL's own request to keep the display on had replaced keep-awake's. Fixed by telling SDL to allow the
+      screensaver (`SDL_VIDEO_ALLOW_SCREENSAVER`, `set_allow_screensaver`) and re-asserting the request every
+      minute; this item needs to be re-run to confirm.*
 - [ ] **Transfers survive.** Set Windows' sleep timer low (Settings > System > Power: Sleep after 1 minute on
       mains). Start a large torrent download and a large Google Drive upload (the Drive app), start the saver,
       leave it 30+ minutes and do not touch the PC. The PC stays awake and neither transfer stalls or pauses.

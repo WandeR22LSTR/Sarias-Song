@@ -65,6 +65,28 @@ def test_start_and_stop_are_idempotent(log):
     assert len(rec.calls) == 2
 
 
+def test_refresh_reasserts_the_same_request_only_while_active(log):
+    rec = Recorder()
+    k = KeepAwake(log, rec)
+    k.refresh()
+    assert rec.calls == []  # nothing to refresh before start
+    k.start()
+    k.refresh()
+    assert rec.calls == [ES_CONTINUOUS | ES_SYSTEM_REQUIRED] * 2
+    k.stop()
+    k.refresh()
+    assert rec.calls[-1] == ES_CONTINUOUS  # still just the clear: refresh after stop does nothing
+
+
+def test_refresh_is_silent(log, caplog):
+    k = KeepAwake(log, Recorder())
+    k.start()
+    with caplog.at_level(logging.INFO, logger="keepawake-test"):
+        caplog.clear()
+        k.refresh()
+    assert not caplog.records  # once a minute for hours must not fill the log
+
+
 def test_stop_without_start_does_nothing(log):
     rec = Recorder()
     KeepAwake(log, rec).stop()

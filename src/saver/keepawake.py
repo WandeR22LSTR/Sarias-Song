@@ -41,6 +41,16 @@ class KeepAwake:
         else:
             self._log.info("keep-awake on (previous state 0x%08X)", previous)
 
+    def refresh(self) -> None:
+        """Re-assert the request (silently). Cheap insurance.
+
+        The state is per thread and the last ES_CONTINUOUS call wins, so anything else that
+        calls SetThreadExecutionState on this thread would quietly cancel ours. SDL does exactly
+        that (to stop the display sleeping), which is why the saver also tells SDL not to.
+        """
+        if self._active:
+            self._set_state(winapi.ES_CONTINUOUS | winapi.ES_SYSTEM_REQUIRED)
+
     def stop(self) -> None:
         if not self._active:
             return

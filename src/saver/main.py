@@ -93,10 +93,18 @@ def _set_window_icon(pygame, log) -> None:
 def run_saver(cfg: config.Config, windowed: bool, log) -> int:
     winapi.set_dpi_aware()  # before pygame creates a window: physical pixels, no blur
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    # SDL turns the system screensaver off by default, and on Windows it does that by calling
+    # SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED) on the calling thread. That
+    # forces the monitors on, which is not wanted, and being a per-thread, last-call-wins state it
+    # also cancels keep-awake's own request. Seen on Spirit Temple with `powercfg /requests`: a
+    # DISPLAY entry for the saver and nothing under SYSTEM. So tell SDL to allow it, before init.
+    os.environ.setdefault("SDL_VIDEO_ALLOW_SCREENSAVER", "1")
     import pygame
 
     # Not pygame.init(): that would also open the audio device and scan joysticks.
     pygame.display.init()
+    pygame.display.set_allow_screensaver(True)
+    log.info("SDL allows the screensaver / display sleep: %s", pygame.display.get_allow_screensaver())
     pygame.font.init()
     keep_awake = keepawake.KeepAwake(log)  # created before the try so `finally` can always release it
     try:
@@ -163,6 +171,7 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
             frames.add((time.perf_counter() - work_started) * 1000)
             if now >= next_report:
                 log.info("perf: %s; %s", perfstats.format_sample(sampler.sample(), sampler.cores), frames.summary())
+                keep_awake.refresh()  # see KeepAwake.refresh
                 next_report = now + PERF_REPORT_EVERY_SECONDS
             frame_clock.tick(FPS)
         total = sampler.total()

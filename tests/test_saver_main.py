@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pytest
 
@@ -90,6 +91,7 @@ def loop_env(monkeypatch):
     pygame = pytest.importorskip("pygame")
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("SDL_VIDEO_WINDOW_POS", "0,0")  # registered so the saver's own change is undone
+    monkeypatch.delenv("SDL_VIDEO_ALLOW_SCREENSAVER", raising=False)  # likewise, and so the test sees the saver set it
     return pygame
 
 
@@ -167,6 +169,29 @@ def test_keep_awake_is_held_while_the_saver_runs_and_released_after(loop_env, mo
     assert code == 0
     assert calls == [0x80000001, 0x80000000]  # on at the start (ES_CONTINUOUS | ES_SYSTEM_REQUIRED), cleared at the end
     assert seen_while_drawing and all(c == [0x80000001] for c in seen_while_drawing), "held for every frame"
+
+
+def test_sdl_is_told_to_allow_the_screensaver_so_it_cannot_override_keep_awake(loop_env, monkeypatch):
+    # Regression for what powercfg /requests showed on Spirit Temple: SDL's own request to keep the
+    # DISPLAY on (it disables the screensaver by default) replaced the SYSTEM request.
+    pygame = loop_env
+    allowed = []
+    real_update = pygame.display.update
+    monkeypatch.setattr(
+        pygame.display, "update", lambda rects=None: allowed.append(pygame.display.get_allow_screensaver()) or real_update(rects)
+    )
+    run_with_scripted_events(pygame, monkeypatch, [[], []])
+    assert allowed and all(allowed), "the screensaver must be allowed while the saver is drawing"
+    assert os.environ.get("SDL_VIDEO_ALLOW_SCREENSAVER") == "1"
+
+
+def test_keep_awake_is_reasserted_on_the_periodic_tick(loop_env, monkeypatch):
+    pygame = loop_env
+    calls = []
+    _recording_keep_awake(monkeypatch, calls)
+    run_with_scripted_events(pygame, monkeypatch, [[] for _ in range(30)])  # 15 s of fake time: one 10 s tick
+    on = 0x80000001
+    assert calls == [on, on, 0x80000000]  # start, one refresh at the 10 s report, then cleared
 
 
 def test_keep_awake_is_released_even_if_the_saver_crashes(loop_env, monkeypatch):
