@@ -7,14 +7,17 @@ the lights in Kokiri Forest. Built to be comfortable on a streamed display.
 Part of Luca's Ocarina-of-Time-themed project family. Standalone, with no dependency
 on the Ice Cavern hub.
 
-> **Status: phases 1 and 2 are running on Spirit Temple; the checklist is partly ticked.**
+> **Status: phases 1, 2 and 3 are running on Spirit Temple; the checklist is mostly ticked.**
 > Confirmed so far (Luca, 2026-10-08/09, from screenshots, `logs\*.log` and testing): the tray icon,
 > tooltip, menu and Settings; config changes applying on the next launch; the saver covering
 > both monitors (one at negative coordinates) and hiding the taskbar; Segoe UI Light; exit on a
 > key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
 > on a double-click; and, after fixes, no visible banding on the 1440p monitor and a clock that
-> stays put as its digits change; the second-instance guard and Exit. Not yet confirmed:
-> streaming and the 8-hour soak. Autostart is confirmed too, so phase 1 is done
+> stays put as its digits change; the second-instance guard and Exit; autostart (so phase 1 is done);
+> and phase 3: the keep-awake request is held while the saver is up (`powercfg /requests`), a remote
+> "lullaby" still puts the PC to sleep with the saver on screen, and a torrent and a Google Drive upload
+> keep running. Not yet confirmed: streaming (the stream-privacy feature, see `docs/stream-privacy.md`)
+> and the 8-hour soak
 > (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
@@ -22,7 +25,7 @@ on the Ice Cavern hub.
 | --- | --- | --- |
 | 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
-| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | request confirmed with `powercfg /requests`; remote sleep (lullaby/requiem) confirmed; transfers check still to do |
+| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | **confirmed on Spirit Temple** (request held, remote sleep works, transfers keep running) |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
 | 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
 | 6 | Stretch: live transfer rates with `psutil` | not started |
@@ -232,10 +235,10 @@ automatically (Windows drops the request when the thread dies).
       screensaver (`SDL_VIDEO_ALLOW_SCREENSAVER`, `set_allow_screensaver`) and re-asserting the request every
       minute. **Re-run after the fix, confirmed:** SYSTEM shows the `.venv` `pythonw.exe`, DISPLAY shows
       nothing, and `saver.log` says `keep-awake on (previous state 0x80000000)`.*
-- [ ] **Transfers keep running with the saver up.** Luca's PC is deliberately set to never sleep, and the app
+- [x] **Transfers keep running with the saver up.** Luca's PC is deliberately set to never sleep, and the app
       never changes that, so no setting needs touching. Start a large torrent download and a large Google Drive
       upload (the Drive app), note their progress, run the saver for 10+ minutes without touching the PC, then
-      check that both moved on and neither paused.
+      check that both moved on and neither paused. (Verified by Luca, 2026-10-09: both kept running.)
 - [ ] *Optional:* **Windows honours the request.** Only worth doing for extra proof, since the `powercfg` item
       above already shows the request is held. It temporarily shortens the sleep timer and restores it by itself
       (in an administrator PowerShell, after confirming `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`
