@@ -135,11 +135,12 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                    continue
+                    break
                 kind = classify(pygame, event)
                 if kind and policy.should_exit(kind, now, getattr(event, "pos", None)):
                     log.info("exit on %s", kind)
                     running = False
+                    break  # one event is enough; the rest of this batch must not log again
             if not running:
                 break
             pygame.display.update(renderer.frame(datetime.now(), (now - started) * cfg.animation_speed))

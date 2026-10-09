@@ -7,15 +7,18 @@ the lights in Kokiri Forest. Built to be comfortable on a streamed display.
 Part of Luca's Ocarina-of-Time-themed project family. Standalone, with no dependency
 on the Ice Cavern hub.
 
-> **Status: phases 1 and 2 are written, not yet tested on Windows.** Everything that can
-> run anywhere is unit-tested; the Windows-only behaviour (tray, fullscreen window,
-> startup shortcut) has never been seen on a real Windows machine yet. See
-> [Manual test checklist](#manual-test-checklist-spirit-temple).
+> **Status: phases 1 and 2 are running on Spirit Temple; the checklist is partly ticked.**
+> Confirmed so far (Luca, 2026-10-08, from screenshots and `logs\*.log`): the tray icon
+> appears, the saver covers both monitors (one at negative coordinates), hides the
+> taskbar, uses Segoe UI Light, starts in about 0.25 s, and exits cleanly on a key press or
+> mouse move. Not yet confirmed: the menu items, second-instance guard, autostart, click-to-exit,
+> streaming, CPU use and the long soak. See the
+> [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
 | --- | --- | --- |
-| 1 | Tray skeleton: icon, menu, autostart | written, awaiting Windows test |
-| 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | written, awaiting Windows test |
+| 1 | Tray skeleton: icon, menu, autostart | icon confirmed; menu items and autostart still to test |
+| 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
 | 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | not started |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
 | 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
@@ -147,7 +150,7 @@ Only things a unit test cannot see. Tick them off and report back what failed (s
 the relevant `logs\*.log` lines, or just "works").
 
 **Tray (phase 1)**
-- [ ] A green music note appears in the tray (maybe under the `^` overflow); it is legible on the dark taskbar.
+- [x] A green music note appears in the tray (maybe under the `^` overflow); it is legible on the dark taskbar.
 - [ ] Hovering shows "Saria's Song".
 - [ ] Right-click shows **Start screensaver / Settings / Exit**.
 - [ ] **Settings** opens `config.json` in Notepad.
@@ -157,14 +160,15 @@ the relevant `logs\*.log` lines, or just "works").
       Task Manager > Startup apps. `--uninstall-autostart` removes it.
 
 **Saver (phase 2)**
-- [ ] Left-click the icon: the saver is on screen in about a second.
-- [ ] It covers **every** monitor (clock centred on each) and the taskbar is hidden behind it.
-- [ ] Text is sharp, not blurry (DPI scaling is handled). Note your display scaling %.
-- [ ] Clock font: is it the thin Segoe UI Light look? (`logs\saver.log` shows the font file chosen.)
+- [x] Left-click the icon: the saver is on screen in about a second. (Logs: about 0.25 s from spawn to running, five runs.)
+- [x] It covers **every** monitor (clock centred on each) and the taskbar is hidden behind it. (Log: 4480x1440 window at (-1920,0), 2 monitors.)
+- [x] Text is sharp, not blurry (DPI scaling is handled). The display scaling % was not reported.
+- [x] Clock font: the thin Segoe UI Light look. (Log: `C:\WINDOWS\Fonts\segoeuil.ttf`.)
 - [ ] Fireflies drift slowly and smoothly; no tearing, stutter or visible trails.
 - [ ] Moving the mouse or pressing keys during the first 2 seconds does nothing.
-- [ ] After 2 seconds: a **key press** exits (this checks that the saver really got keyboard focus), as does a
-      **click** and a **real mouse move**. A tiny 1-2 pixel nudge does not.
+- [x] After 2 seconds a **key press** exits (this checks that the saver really got keyboard focus) and so does a
+      **real mouse move**. (Log: `exit on key`, `exit on mouse_move`.)
+- [ ] A **click** exits, and a tiny 1-2 pixel nudge does not.
 - [ ] After exit, windows and the taskbar are exactly as before, and no `python` process remains in Task Manager.
 - [ ] Clicking the tray icon again while the saver is up does not stack a second saver.
 - [ ] Streamed via Apollo/Artemis: the saver shows on the stream and input from the client exits it.

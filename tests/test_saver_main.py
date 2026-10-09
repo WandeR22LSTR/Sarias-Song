@@ -138,6 +138,16 @@ def test_key_during_grace_is_ignored_and_a_later_key_exits(loop_env, monkeypatch
     assert len(frames) == 5  # drew frames for iterations 0-4, exited on iteration 5
 
 
+def test_a_burst_of_events_logs_the_exit_once(loop_env, monkeypatch, caplog):
+    # Seen on Spirit Temple: three key events in one batch logged "exit on key" three times.
+    pygame = loop_env
+    script = [[], [], [], [], [key(), key(), key()]]
+    with caplog.at_level(logging.INFO, logger="loop-test"):
+        code, _ = run_with_scripted_events(pygame, monkeypatch, script, grace_seconds=1.0)
+    assert code == 0
+    assert [r.getMessage() for r in caplog.records].count("exit on key") == 1
+
+
 def test_small_mouse_jitter_is_ignored_but_a_real_move_exits(loop_env, monkeypatch):
     pygame = loop_env
     move = lambda p: pygame.event.Event(pygame.MOUSEMOTION, pos=p, rel=(1, 1), buttons=(0, 0, 0))  # noqa: E731
