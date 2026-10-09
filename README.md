@@ -13,8 +13,8 @@ on the Ice Cavern hub.
 > both monitors (one at negative coordinates) and hiding the taskbar; Segoe UI Light; exit on a
 > key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
 > on a double-click; and, after fixes, no visible banding on the 1440p monitor. Not yet confirmed:
-> firefly motion, desktop restored after exit, second-instance guard, Exit, autostart, streaming, CPU
-> use and the long soak. See the
+> the clock layout retest, second-instance guard, Exit, autostart, streaming and the 8-hour soak
+> (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
@@ -114,8 +114,15 @@ stops the saver: bad values fall back to the defaults, and the problem is writte
   normal frame only touches the fireflies and the digits and tells the display about each rectangle once.
   Measured headless in the cloud on a two-monitor layout (4480x1440): a frame's work fell from 8-9 ms to
   about 3 ms and the pixels pushed per frame from 5-7 M to 1-1.5 M. Measured on Spirit Temple (two
-  monitors, seconds on) BEFORE that change: 36% of one core (3.0% of the whole 12-thread PC), 12.7 ms
-  of work per frame, 108-113 MB memory with no growth over 8 minutes. Compare your `perf:` lines.
+  monitors, 1080p + 1440p, seconds on, 2026-10-08):
+
+  | | cpu, one core | cpu, whole 12-thread PC | work per frame | memory |
+  | --- | --- | --- | --- | --- |
+  | before the glow was baked | 36% | 3.0% | 12.7 ms | 108-113 MB |
+  | after | 18% | 1.5% | 6.2 ms | 117-122 MB, flat over 34 minutes |
+
+  With seconds on there is still one 80-100 ms frame per second (the glow is rebuilt when the seconds
+  digit changes), which is why a minute logs about 1725 frames instead of 1800. It is not visible.
 * **No banding.** The background, the clock's glow and the fireflies are all only a few colour levels
   bright, so rounding them to 8 bits leaves visible steps on a panel that shows dark detail. Each is
   computed in floating point and given a little noise *before* the final rounding, which turns the
@@ -199,8 +206,8 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] Double-clicking the tray icon starts only one saver. (The tray is hidden once the saver is up, so
       a second click can only happen in the first fraction of a second.)
 - [ ] Streamed via Apollo/Artemis: the saver shows on the stream and input from the client exits it.
-- [ ] CPU and memory: run the saver for at least 70 seconds, then send the `perf:` lines from `logs\saver.log`
-      (not measured on Windows yet; the design aims for low single digits). Mention your monitor setup.
+- [x] CPU and memory, read from the `perf:` lines in `logs\saver.log`: 18% of one core (1.5% of the whole
+      PC), 6.2 ms of work per frame, 117-122 MB and flat over 34 minutes (two monitors, seconds on).
 
 **Keep-awake and remote sleep (phase 3, not yet written)**
 - [ ] With the Windows sleep timer set low (e.g. 1 minute) and a large transfer running, the PC
