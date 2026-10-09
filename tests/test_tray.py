@@ -44,6 +44,12 @@ def fake_pystray(monkeypatch):
 @pytest.fixture(autouse=True)
 def isolated_logs(monkeypatch, tmp_path):
     monkeypatch.setattr(applog, "log_dir", lambda: tmp_path / "logs")
+    # On Windows the real mutex would be taken by the first run_tray() call and
+    # stay held until the test process exits (the handle is never closed), so every
+    # later call would look like "another instance is running". It would also clash
+    # with a tray app actually running while the tests are. Only the test below that
+    # is about the second-instance case overrides this.
+    monkeypatch.setattr(tray.winapi, "acquire_single_instance", lambda name: object())
 
 
 def test_menu_has_start_settings_exit_and_start_is_the_left_click_default(fake_pystray):
