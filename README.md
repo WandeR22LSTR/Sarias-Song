@@ -191,4 +191,7 @@ the relevant `logs\*.log` lines, or just "works").
 * **PowerShell refuses to run the script:** use the `powershell -ExecutionPolicy Bypass -File ...` form shown above.
 * **"Python was not found; run without arguments to install from the Microsoft Store":** that is Windows'
   placeholder `python.exe`, meaning Python is not installed. Install 3.13 (see Quick start) and reopen PowerShell.
-  `dev-setup.ps1` detects this and tells you.
+  `dev-setup.ps1` detects this, also looks in Python's default install folders (so a Python installed a
+  minute ago works without reopening PowerShell), and lists what it checked if it still finds nothing.
+* **`..venv\Scripts\python.exe is not recognized`:** the path lost a backslash. It is
+  `.\.venv\Scripts\python.exe` (dot, backslash, dot, `venv`). It also just means setup has not succeeded yet.
