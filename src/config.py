@@ -17,7 +17,7 @@ from typing import Any
 
 APP_NAME = "Saria's Song"
 
-# Modes the saver can render. Phase 4 adds "text", "slideshow" and "mixed".
+# Modes the saver can render. The phase 6 widgets add "text", "slideshow", "mixed" and more.
 VALID_MODES = ("clock",)
 VALID_MONITORS = ("all", "primary")
 VALID_EXIT_EVENTS = ("key", "mouse_move", "mouse_click")

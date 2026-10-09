@@ -16,7 +16,7 @@ on the Ice Cavern hub.
 > stays put as its digits change; the second-instance guard and Exit; autostart (so phase 1 is done);
 > and phase 3: the keep-awake request is held while the saver is up (`powercfg /requests`), a remote
 > "lullaby" still puts the PC to sleep with the saver on screen, and a torrent and a Google Drive upload
-> keep running. Not yet confirmed: streaming (the stream-privacy feature, see `docs/stream-privacy.md`)
+> keep running. Not yet confirmed: streaming (now phase 4, see `docs/stream-privacy.md`)
 > and the 8-hour soak
 > (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
@@ -26,9 +26,12 @@ on the Ice Cavern hub.
 | 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
 | 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | **confirmed on Spirit Temple** (request held, remote sleep works, transfers keep running) |
-| 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
-| 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
-| 6 | Stretch: live transfer rates with `psutil` | not started |
+| 4 | **Apollo / Artemis: stream awareness.** While a stream is active the saver runs on the physical monitors only (never on the virtual display), ignores the client's input, never takes focus, and starts and stops by itself. On by default, with a setting to turn it off | brainstorm and design, see [`docs/stream-privacy.md`](docs/stream-privacy.md) |
+| 5 | **Packaging and technical features.** PyInstaller exe, install and uninstall, a settings GUI, and the other technical features | not started |
+| 6 | **Visuals.** A Zelda-themed rework, light audio, refined visuals, new layouts and a set of widgets (this absorbs the old text, slideshow and mixed modes and the live transfer rates) | not started |
+
+*Plan revised 2026-10-09 at Luca's request. Phases 1 to 3 are unchanged. The old phase 4 (text and slideshow modes)
+and old phase 6 (transfer rates) now live inside the new phase 6 as widgets.*
 
 The full brief is in [`docs/handoffs/saria-song-handoff.md`](docs/handoffs/saria-song-handoff.md).
 
@@ -91,7 +94,7 @@ stops the saver: bad values fall back to the defaults, and the problem is writte
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `mode` | `"clock"` | Only `clock` exists so far (`text`, `slideshow`, `mixed` come in phase 4). |
+| `mode` | `"clock"` | Only `clock` exists so far (`text`, `slideshow`, `mixed` and more come with the phase 6 widgets). |
 | `colors.background` / `background_edge` | `#0b1410` / `#040806` | Centre and corners of the backdrop. Deep green-black, not pure black. |
 | `colors.accent` | `#7fd48a` | Fireflies and the clock's halo. |
 | `colors.text` / `dim` | `#cfe8d4` / `#5f8a68` | Time and date. |
@@ -217,7 +220,7 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] CPU and memory, read from the `perf:` lines in `logs\saver.log`: 18% of one core (1.5% of the whole
       PC), 6.2 ms of work per frame, 117-122 MB and flat over 34 minutes (two monitors, seconds on).
 
-**Keep-awake and remote sleep (phase 3, written, awaiting Windows test)**
+**Keep-awake and remote sleep (phase 3, confirmed)**
 
 The saver holds `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` while it is on screen and
 clears it on exit (`logs\saver.log`: `keep-awake on` / `keep-awake off`). It blocks idle sleep only. It
