@@ -22,7 +22,7 @@ on the Ice Cavern hub.
 | --- | --- | --- |
 | 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
-| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | request confirmed with `powercfg /requests`; sleep-timer, transfer and remote-sleep tests still to do |
+| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | request confirmed with `powercfg /requests`; remote sleep (lullaby/requiem) confirmed; transfers check still to do |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
 | 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
 | 6 | Stretch: live transfer rates with `psutil` | not started |
@@ -232,14 +232,25 @@ automatically (Windows drops the request when the thread dies).
       screensaver (`SDL_VIDEO_ALLOW_SCREENSAVER`, `set_allow_screensaver`) and re-asserting the request every
       minute. **Re-run after the fix, confirmed:** SYSTEM shows the `.venv` `pythonw.exe`, DISPLAY shows
       nothing, and `saver.log` says `keep-awake on (previous state 0x80000000)`.*
-- [ ] **Transfers survive.** Set Windows' sleep timer low (Settings > System > Power: Sleep after 1 minute on
-      mains). Start a large torrent download and a large Google Drive upload (the Drive app), start the saver,
-      leave it 30+ minutes and do not touch the PC. The PC stays awake and neither transfer stalls or pauses.
-      (Without the saver, the PC should sleep after the timer: that is the control.) Restore your sleep
-      setting afterwards.
-- [ ] **Remote-sleep test:** with the saver running, send the usual "lullaby" sleep command from the
+- [ ] **Transfers keep running with the saver up.** Luca's PC is deliberately set to never sleep, and the app
+      never changes that, so no setting needs touching. Start a large torrent download and a large Google Drive
+      upload (the Drive app), note their progress, run the saver for 10+ minutes without touching the PC, then
+      check that both moved on and neither paused.
+- [ ] *Optional:* **Windows honours the request.** Only worth doing for extra proof, since the `powercfg` item
+      above already shows the request is held. It temporarily shortens the sleep timer and restores it by itself
+      (in an administrator PowerShell, after confirming `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`
+      shows `0x00000000`):
+      `try { powercfg /change standby-timeout-ac 1; Start-Sleep 420 } finally { powercfg /change standby-timeout-ac 0 }`
+      then start the saver, leave the PC alone for 8 minutes, and check `saver.log` has a `perf:` line each
+      minute with no gap and the Kernel-Power event log has no Id 42. If the PowerShell window is closed mid-test
+      the restore does not run: put it back with `powercfg /change standby-timeout-ac 0`.
+- [x] **Remote-sleep test:** with the saver running, send the usual "lullaby" sleep command from the
       Raspberry Pi. The PC must still go to sleep. Then "requiem" wakes it and note what state the saver is in.
       Keep-awake must only block *idle* sleep, never this deliberate command.
+      (Reported by Luca 2026-10-09: the saver was on screen, the PC went to sleep and stayed off for at least a
+      minute, and requiem woke it. Kernel-Power logged Id 42 at 11:30:22 PM and Id 107 at 11:30:23 PM; those
+      timestamps are one second apart despite the minute-long sleep, which is unexplained and does not affect
+      the result. The state of the saver after waking has not been reported yet.)
 
 **Soak (acceptance criterion)**
 - [ ] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5
