@@ -22,7 +22,7 @@ on the Ice Cavern hub.
 | --- | --- | --- |
 | 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
-| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | not started |
+| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | written, awaiting Windows test |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
 | 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
 | 6 | Stretch: live transfer rates with `psutil` | not started |
@@ -214,11 +214,22 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] CPU and memory, read from the `perf:` lines in `logs\saver.log`: 18% of one core (1.5% of the whole
       PC), 6.2 ms of work per frame, 117-122 MB and flat over 34 minutes (two monitors, seconds on).
 
-**Keep-awake and remote sleep (phase 3, not yet written)**
-- [ ] With the Windows sleep timer set low (e.g. 1 minute) and a large transfer running, the PC
-      stays awake and the transfer finishes with no stall during 30+ minutes of saver.
+**Keep-awake and remote sleep (phase 3, written, awaiting Windows test)**
+
+The saver holds `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` while it is on screen and
+clears it on exit (`logs\saver.log`: `keep-awake on` / `keep-awake off`). It blocks idle sleep only. It
+does not force the monitors on, and does not touch power plans or the registry. A crash releases it
+automatically (Windows drops the request when the thread dies).
+- [ ] **Quick proof it is in effect.** In an administrator PowerShell, while the saver is up, run
+      `powercfg /requests`. A `python.exe` / `pythonw.exe` entry (this repo's `.venv`) should appear under
+      SYSTEM. Exit the saver and run it again: the entry should be gone.
+- [ ] **Transfers survive.** Set Windows' sleep timer low (Settings > System > Power: Sleep after 1 minute on
+      mains). Start a large torrent download and a large Google Drive upload (the Drive app), start the saver,
+      leave it 30+ minutes and do not touch the PC. The PC stays awake and neither transfer stalls or pauses.
+      (Without the saver, the PC should sleep after the timer: that is the control.) Restore your sleep
+      setting afterwards.
 - [ ] **Remote-sleep test:** with the saver running, send the usual "lullaby" sleep command from the
-      Raspberry Pi. The PC must still go to sleep. Then "requiem" wakes it and the saver is still sensible.
+      Raspberry Pi. The PC must still go to sleep. Then "requiem" wakes it and note what state the saver is in.
       Keep-awake must only block *idle* sleep, never this deliberate command.
 
 **Soak (acceptance criterion)**

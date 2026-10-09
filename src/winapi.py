@@ -160,6 +160,33 @@ def process_memory_mb() -> float | None:
         return None
 
 
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+# ES_DISPLAY_REQUIRED (0x2) is deliberately never used: keeping the PC awake does not
+# need the monitors forced on, and the saver is meant to be easy on them.
+
+
+def set_thread_execution_state(flags: int) -> int:
+    """Tell Windows what the calling thread needs, so idle timers do not sleep the PC.
+
+    Non-obvious points. The state belongs to the THREAD that calls this: set and clear it
+    from the same thread, or the clear does nothing. With ES_CONTINUOUS it stays in force
+    until it is cleared or the thread ends (so a crashed saver releases it automatically);
+    without it, it only resets the idle timer once. It affects idle sleep only: an explicit
+    sleep request, such as a Sleep-on-LAN command, is not blocked by it. The function
+    reports failure by returning 0; otherwise it returns the previous state.
+
+    The argument is declared as an unsigned int because ES_CONTINUOUS has the top bit set,
+    which does not fit ctypes' default signed int.
+    """
+    if not IS_WINDOWS:
+        return 0
+    function = ctypes.windll.kernel32.SetThreadExecutionState
+    function.argtypes = [ctypes.c_uint]
+    function.restype = ctypes.c_uint
+    return function(flags)
+
+
 def allow_set_foreground(pid: int) -> None:
     """Let another process take the foreground (called by the tray for the saver).
 

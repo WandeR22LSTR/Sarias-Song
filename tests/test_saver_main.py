@@ -148,6 +148,41 @@ def test_a_burst_of_events_logs_the_exit_once(loop_env, monkeypatch, caplog):
     assert [r.getMessage() for r in caplog.records].count("exit on key") == 1
 
 
+def _recording_keep_awake(monkeypatch, calls):
+    """Make run_saver build a KeepAwake that records the flags it is asked to set."""
+    real = saver_main.keepawake.KeepAwake
+    monkeypatch.setattr(
+        saver_main.keepawake, "KeepAwake", lambda log: real(log, lambda flags: calls.append(flags) or 0x80000000)
+    )
+
+
+def test_keep_awake_is_held_while_the_saver_runs_and_released_after(loop_env, monkeypatch):
+    pygame = loop_env
+    calls, seen_while_drawing = [], []
+    _recording_keep_awake(monkeypatch, calls)
+    real_update = pygame.display.update
+    # (Hooking display.update, which the helper leaves alone: it re-patches Renderer.frame.)
+    monkeypatch.setattr(pygame.display, "update", lambda rects=None: seen_while_drawing.append(list(calls)) or real_update(rects))
+    code, _ = run_with_scripted_events(pygame, monkeypatch, [[], []])
+    assert code == 0
+    assert calls == [0x80000001, 0x80000000]  # on at the start (ES_CONTINUOUS | ES_SYSTEM_REQUIRED), cleared at the end
+    assert seen_while_drawing and all(c == [0x80000001] for c in seen_while_drawing), "held for every frame"
+
+
+def test_keep_awake_is_released_even_if_the_saver_crashes(loop_env, monkeypatch):
+    pygame = loop_env
+    calls = []
+    _recording_keep_awake(monkeypatch, calls)
+
+    def boom(rects=None):
+        raise RuntimeError("display exploded")
+
+    monkeypatch.setattr(pygame.display, "update", boom)
+    with pytest.raises(RuntimeError):
+        run_with_scripted_events(pygame, monkeypatch, [[], []])
+    assert calls == [0x80000001, 0x80000000]  # a crash must not leave the PC unable to sleep
+
+
 def test_the_saver_logs_its_own_cpu_and_memory(loop_env, monkeypatch, caplog):
     # Luca cannot watch Task Manager behind a fullscreen saver, so it reports to saver.log:
     # a line after PERF_FIRST_REPORT_SECONDS, one per minute after that, and a total at exit.

@@ -22,7 +22,7 @@ import applog
 import config
 import perfstats
 import winapi
-from saver import exitpolicy
+from saver import exitpolicy, keepawake
 from saver.render import FPS, Layout, Rect, Renderer, plan_layout
 
 
@@ -98,6 +98,7 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
     # Not pygame.init(): that would also open the audio device and scan joysticks.
     pygame.display.init()
     pygame.font.init()
+    keep_awake = keepawake.KeepAwake(log)  # created before the try so `finally` can always release it
     try:
         if windowed:
             layout = Layout(Rect(100, 100, 1280, 720), (Rect(0, 0, 1280, 720),))
@@ -133,6 +134,9 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
         pygame.display.flip()
         log.info("saver running (%d fps cap, grace %.1fs)", FPS, cfg.grace_seconds)
 
+        # Block idle sleep while the saver is up. Released in `finally`, on this same thread.
+        keep_awake.start()
+
         # The saver covers the screen, so it reports its own CPU and memory to the log:
         # once soon after starting (short tests), then once a minute (the 8-hour soak).
         sampler = perfstats.ProcessSampler()
@@ -166,6 +170,7 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
             log.info("perf over the whole run (%.0f s): %s", total.seconds, perfstats.format_sample(total, sampler.cores))
         return 0
     finally:
+        keep_awake.stop()
         pygame.quit()
 
 

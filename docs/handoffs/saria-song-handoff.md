@@ -150,5 +150,5 @@ Answers Luca gave to the section 0 / section 8 questions:
 | Ice Cavern handoff | Ignore it. Not copied into this repo. |
 | Monitors | Cover **all** monitors. |
 | Lock on exit | **No.** Return to the desktop only. |
-| Streaming | Assumed Apollo/Moonlight-style remote play (not confirmed). |
-| Transfer clients | Not yet answered. Only matters for phase 3 testing and phase 6. |
+| Streaming | Apollo to Artemis (confirmed 2026-10-09). New requirement: while a stream is active the saver should run automatically on the **physical** monitor(s) but **not** on the virtual display, so Luca can use the PC privately; default on, with a setting for the alternative. Apollo recently changed from switching the physical monitor off to mirroring. Not built yet; see `docs/stream-privacy.md`. |
+| Transfer clients | Everything if possible; the main cases are **torrenting** and **uploading to Google Drive** with the Drive app (2026-10-09). |
