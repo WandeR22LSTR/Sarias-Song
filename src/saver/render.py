@@ -162,12 +162,13 @@ def vignette_amount(nx: float, ny: float) -> float:
 
 BRIGHTNESS_LEVELS = 10
 GLOW_PEAK = 0.55  # brightest a firefly gets, as a fraction of the accent colour
-CLOCK_GLOW_STRENGTH = 0.2
+# The clock's halo is a soft bloom: two Gaussian blurs of the text, each given as
+# (sigma as a fraction of the font height, weight). The tight one makes a close
+# glow, the wide one a faint wash around it.
+HALO_LAYERS = ((0.03, 0.6), (0.10, 0.4))
+HALO_STRENGTH = 0.5  # bloom brightness relative to the accent colour
+HALO_SHRINK = 4  # blurs run at 1/4 size: smooth fields do not need full resolution
 FPS = 30
-
-
-def _scaled(color: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
-    return tuple(min(255, max(0, round(c * factor))) for c in color)  # type: ignore[return-value]
 
 
 def load_font(names: str, size: int, log=None):
@@ -187,24 +188,37 @@ def load_font(names: str, size: int, log=None):
     return pygame.font.Font(None, size)
 
 
-def make_glow_sprites(radius: int, color: tuple[int, int, int]):
-    """Brightness ladder of one soft round glow, for additive blending."""
-    import pygame
+def make_glow_sprites(radius: int, color: tuple[int, int, int], rng: random.Random | None = None):
+    """Brightness ladder of one soft round glow, for additive blending.
 
+    The falloff, (1 - distance/radius) ** 2.2, is computed per pixel in floating
+    point and dithered before rounding (see make_background). Drawing it as 1 px
+    rings in 8 bits, as an earlier version did, left faint concentric contours
+    and radial spokes that a contrasty panel shows. Outside the circle the value
+    is exactly 0, so the square sprite never shows an edge when added.
+    """
+    import pygame
+    from PIL import Image, ImageMath
+
+    rng = rng or random.Random(radius)
     size = radius * 2
-    base = pygame.Surface((size, size))
-    base.fill((0, 0, 0))
-    # Draw rings from the outside in, each brighter than the last. Cheap, and
-    # smooth enough at these low intensities. falloff^2.2 gives a soft halo.
-    for r in range(radius, 0, -1):
-        k = (1 - r / radius) ** 2.2
-        pygame.draw.circle(base, _scaled(color, k * GLOW_PEAK), (radius, radius), r)
+    middle = radius - 0.5  # centre of the sprite, in pixel-centre coordinates
+    falloff = Image.new("F", (size, size))
+    falloff.putdata(
+        [max(0.0, 1.0 - math.hypot(x - middle, y - middle) / radius) ** 2.2 for y in range(size) for x in range(size)]
+    )
+    noise = Image.frombytes("L", (size, size), rng.randbytes(size * size)).convert("F")
+    noise = noise.point(lambda x: x / 256.0)  # uniform in [0, 1), shared by every level and channel
+
     sprites = []
     for level in range(BRIGHTNESS_LEVELS):
-        s = base.copy()
-        v = round(255 * (level + 1) / BRIGHTNESS_LEVELS)
-        s.fill((v, v, v), special_flags=pygame.BLEND_RGB_MULT)
-        sprites.append(s)
+        gain = GLOW_PEAK * (level + 1) / BRIGHTNESS_LEVELS
+        planes = []
+        for channel in color:
+            value = falloff.point(lambda x, k=channel * gain: x * k)  # float colour level
+            planes.append(ImageMath.lambda_eval(lambda a: a["v"] + a["n"], v=value, n=noise).convert("L"))
+        image = Image.merge("RGB", planes)
+        sprites.append(pygame.image.frombytes(image.tobytes(), image.size, "RGB"))
     return sprites
 
 
@@ -249,6 +263,35 @@ def make_background(width: int, height: int, colors: Colors, rng: random.Random)
     return pygame.image.frombytes(img.tobytes(), img.size, "RGB")
 
 
+def make_halo(coverage, font_height: int, color: tuple[int, int, int], strength: float, rng: random.Random):
+    """Soft bloom for the clock text, as an RGB image to be ADDED onto the screen.
+
+    `coverage` is a Pillow "L" image of the text (white on black) whose width and
+    height are multiples of HALO_SHRINK. Like the background, the glow is a few
+    colour levels high, so it is kept in floating point and dithered before the
+    final rounding; otherwise it shows as stair-stepped blocks around the glyphs.
+    The earlier version shrank and re-enlarged the text in 8 bits, which did.
+    """
+    from PIL import Image, ImageFilter, ImageMath
+
+    width, height = coverage.size
+    small = coverage.resize((width // HALO_SHRINK, height // HALO_SHRINK), Image.BOX)  # area average
+    total = None
+    for fraction, weight in HALO_LAYERS:
+        sigma = fraction * font_height / HALO_SHRINK
+        layer = small.filter(ImageFilter.GaussianBlur(sigma)).convert("F").point(lambda x, w=weight: x * w)
+        total = layer if total is None else ImageMath.lambda_eval(lambda a: a["x"] + a["y"], x=total, y=layer)
+    field = total.resize((width, height), Image.BICUBIC)  # 0..255 coverage, in float
+
+    noise = Image.frombytes("L", (width, height), rng.randbytes(width * height)).convert("F")
+    noise = noise.point(lambda x: x / 256.0)  # uniform in [0, 1)
+    planes = []
+    for channel in color:
+        level = field.point(lambda x, k=channel * strength / 255.0: x * k)  # float colour level
+        planes.append(ImageMath.lambda_eval(lambda a: a["v"] + a["n"], v=level, n=noise).convert("L"))
+    return Image.merge("RGB", planes)
+
+
 class MonitorScene:
     """Clock and fireflies for one monitor, drawn into a shared window surface."""
 
@@ -261,10 +304,11 @@ class MonitorScene:
         self.time_font = load_font(cfg.font, max(24, int(h * 0.22)), log)
         self.date_font = load_font(cfg.font, max(12, int(h * 0.05)), log)
         radii = [max(6, int(h * f)) for f in (0.018, 0.03, 0.045)]
-        self.sprites = [make_glow_sprites(r, cfg.colors.accent) for r in radii]
+        self.sprites = [make_glow_sprites(r, cfg.colors.accent, random.Random(seed ^ r)) for r in radii]
         self.fireflies = make_fireflies(seed, count_fireflies(area.w, area.h))
         self._text_key: tuple[str, str] | None = None
         self._time_surf = self._date_surf = self._glow_surf = None
+        self._rng = random.Random(seed ^ 0x5EED)  # dither noise for the halo
         self.background = make_background(area.w, area.h, cfg.colors, random.Random(seed))
 
     # -- clock text ---------------------------------------------------------
@@ -277,17 +321,21 @@ class MonitorScene:
         colors = self.cfg.colors
         self._time_surf = self.time_font.render(time_text, True, colors.text)
         self._date_surf = self.date_font.render(date_text, True, colors.dim) if date_text else None
-        # Soft halo: render the time on black, shrink and re-enlarge to blur it.
-        m = self.time_font.get_height() // 2
+        # Soft halo: the text as white-on-black coverage, padded so the wide blur
+        # has room, then blurred into a bloom (see make_halo).
+        from PIL import Image
+
+        font_height = self.time_font.get_height()
+        m = font_height // 2
         tw, th = self._time_surf.get_size()
-        halo = pygame.Surface((tw + 2 * m, th + 2 * m))
-        halo.fill((0, 0, 0))
-        halo.blit(self.time_font.render(time_text, True, colors.accent), (m, m))
-        small = pygame.transform.smoothscale(halo, (max(1, halo.get_width() // 8), max(1, halo.get_height() // 8)))
-        glow = pygame.transform.smoothscale(small, halo.get_size())
-        v = round(255 * CLOCK_GLOW_STRENGTH * 3)  # blur spreads energy, so lift it back
-        glow.fill((min(v, 255),) * 3, special_flags=pygame.BLEND_RGB_MULT)
-        self._glow_surf = glow
+        pad_w = -(-(tw + 2 * m) // HALO_SHRINK) * HALO_SHRINK  # round up to a multiple
+        pad_h = -(-(th + 2 * m) // HALO_SHRINK) * HALO_SHRINK
+        canvas = pygame.Surface((pad_w, pad_h))
+        canvas.fill((0, 0, 0))
+        canvas.blit(self.time_font.render(time_text, True, (255, 255, 255), (0, 0, 0)), (m, m))
+        coverage = Image.frombytes("RGB", canvas.get_size(), pygame.image.tobytes(canvas, "RGB")).getchannel("G")
+        halo = make_halo(coverage, font_height, colors.accent, HALO_STRENGTH, self._rng)
+        self._glow_surf = pygame.image.frombytes(halo.tobytes(), halo.size, "RGB")
         self._glow_margin = m
 
     # -- one frame ----------------------------------------------------------

@@ -1,3 +1,4 @@
+import math
 import random
 from datetime import datetime
 
@@ -248,6 +249,91 @@ def test_background_has_no_seams_between_processing_strips(pg):
     for seam in (256, 512):
         means = [sum(surf.get_at((x, y))[1] for x in range(100, 1100)) / 1000 for y in range(seam - 6, seam + 6)]
         assert max(abs(b - a) for a, b in zip(means, means[1:])) < 0.1, (seam, means)
+
+
+def test_firefly_glow_matches_the_analytic_falloff_within_one_dither_level(pg):
+    # Regression for faint concentric rings and radial spokes (1 px rings drawn in 8 bits).
+    # floor(value + noise) is always within 1 level of the exact float value, so a
+    # sprite built the right way agrees with the formula at EVERY pixel.
+    radius, accent = 40, (127, 212, 138)
+    sprites = render.make_glow_sprites(radius, accent, random.Random(3))
+    assert len(sprites) == render.BRIGHTNESS_LEVELS
+    middle = radius - 0.5
+    for level in (0, 4, 9):
+        gain = render.GLOW_PEAK * (level + 1) / render.BRIGHTNESS_LEVELS
+        sprite = sprites[level]
+        assert sprite.get_size() == (2 * radius, 2 * radius)
+        for y in range(2 * radius):
+            for x in range(2 * radius):
+                falloff = max(0.0, 1.0 - math.hypot(x - middle, y - middle) / radius) ** 2.2
+                got = sprite.get_at((x, y))
+                for channel in range(3):
+                    assert abs(got[channel] - accent[channel] * gain * falloff) <= 1.0, (level, x, y, channel)
+
+
+def test_firefly_glow_is_exactly_black_outside_its_circle_so_no_square_edge_shows(pg):
+    sprites = render.make_glow_sprites(30, (127, 212, 138), random.Random(1))
+    for sprite in sprites:
+        for corner in ((0, 0), (59, 0), (0, 59), (59, 59), (2, 2), (57, 3)):
+            assert sprite.get_at(corner)[:3] == (0, 0, 0)
+
+
+def test_brighter_levels_are_brighter(pg):
+    sprites = render.make_glow_sprites(30, (127, 212, 138), random.Random(1))
+    centres = [s.get_at((29, 29))[1] for s in sprites]
+    assert centres == sorted(centres) and centres[-1] > centres[0] * 5
+
+
+def _block_coverage(width=800, height=400, box=(300, 100, 500, 300)):
+    from PIL import Image, ImageDraw
+
+    coverage = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(coverage).rectangle(box, fill=255)
+    return coverage
+
+
+def test_halo_falls_off_smoothly_with_no_stair_steps(pg):
+    # Regression for the blocky edge around the clock digits. The old halo enlarged an
+    # 8x-shrunk mask in 8 bits, giving ~8 px stair steps. Row-averaging cancels the dither
+    # grain; a smooth glow then has a tiny second difference, a stair has a huge one.
+    halo = render.make_halo(_block_coverage(), 200, (100, 200, 100), 0.5, random.Random(1))
+    green = halo.getchannel("G")
+    profile = [sum(green.getpixel((x, y)) for y in range(140, 260)) / 120 for x in range(500, 780)]
+    second = [profile[i - 1] - 2 * profile[i] + profile[i + 1] for i in range(1, len(profile) - 1)]
+    assert max(abs(s) for s in second) < 1.0
+    assert all(a >= b - 0.15 for a, b in zip(profile, profile[1:])), "glow must fade steadily outward"
+    assert profile[0] > 30 and profile[-1] < 2  # a real glow at the edge, nothing left far away
+
+
+def test_halo_far_from_the_text_is_exactly_black(pg):
+    # floor(0 + noise) is 0, so the dither can never lift the black far field.
+    halo = render.make_halo(_block_coverage(), 200, (100, 200, 100), 0.5, random.Random(1))
+    assert halo.crop((0, 0, 40, 40)).getextrema() == ((0, 0), (0, 0), (0, 0))
+
+
+def test_halo_is_centred_on_the_text_and_tinted_with_the_accent(pg):
+    from PIL import Image
+
+    halo = render.make_halo(_block_coverage(), 200, (60, 200, 100), 0.5, random.Random(1))
+    green = halo.getchannel("G")
+    columns = list(green.resize((800, 1), Image.BOX).getdata())
+    rows = list(green.resize((1, 400), Image.BOX).getdata())
+    centroid_x = sum(i * v for i, v in enumerate(columns)) / sum(columns)
+    centroid_y = sum(i * v for i, v in enumerate(rows)) / sum(rows)
+    assert abs(centroid_x - 400) < 2 and abs(centroid_y - 200) < 2  # blur has not shifted it
+    # Brightness ratio between channels follows the accent colour (60 : 200 : 100).
+    means = [sum(halo.getchannel(c).resize((1, 1), Image.BOX).getdata()) for c in "RGB"]
+    assert means[1] > means[2] > means[0]
+
+
+def test_clock_halo_surface_is_padded_to_a_multiple_of_the_shrink_factor(pg):
+    scene = render.MonitorScene(Rect(0, 0, 1000, 700), config.from_dict({}), seed=1)
+    for text in ("22:47", "7:05 PM", "11:11:11"):
+        scene._refresh_text(text, "Thursday, 8 October")
+        w, h = scene._glow_surf.get_size()
+        assert w % render.HALO_SHRINK == 0 and h % render.HALO_SHRINK == 0
+        tw, th = scene._time_surf.get_size()
+        assert w >= tw + 2 * scene._glow_margin and h >= th + 2 * scene._glow_margin
 
 
 def test_background_handles_sizes_that_are_not_strip_multiples(pg):

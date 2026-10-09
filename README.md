@@ -106,9 +106,14 @@ stops the saver: bad values fall back to the defaults, and the problem is writte
   ("fake fullscreen": no display-mode switch, so it behaves with streaming capture). It supports
   the Windows screensaver arguments `/s` (run), `/c` (open config), `/p` (preview, exits at once), so it could
   become a real `.scr` later. With no argument it runs, unlike a real `.scr`.
-* **Rendering** is built for long runs: a pre-baked, dithered background and dirty-rectangle
-  updates, capped at 30 fps. A steady frame takes about 2 ms on 1080p and 5 ms across 4480x1440
-  in headless tests here. The clock drifts a few pixels over minutes to avoid burn-in.
+* **Rendering** is built for long runs: a pre-baked background and dirty-rectangle updates,
+  capped at 30 fps. A steady frame takes about 2.4 ms on 1080p, 4 ms on 1440p and 7 ms across
+  both together (4480x1440) in headless tests in the cloud, so it is not a measure of Spirit Temple.
+  The clock drifts a few pixels over minutes to avoid burn-in.
+* **No banding.** The background, the clock's glow and the fireflies are all only a few colour levels
+  bright, so rounding them to 8 bits leaves visible steps on a panel that shows dark detail. Each is
+  computed in floating point and given a little noise *before* the final rounding, which turns the
+  steps into fine grain. Each of these was a real bug reported from the 1440p monitor.
 * **Logs** go to `logs\tray.log`, `logs\saver.log` and `logs\saver-stderr.log`. When something misbehaves,
   send these.
 
