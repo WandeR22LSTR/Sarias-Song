@@ -33,7 +33,9 @@ on the Ice Cavern hub.
 *Plan revised 2026-10-09 at Luca's request. Phases 1 to 3 are unchanged. The old phase 4 (text and slideshow modes)
 and old phase 6 (transfer rates) now live inside the new phase 6 as widgets.*
 
-The full brief is in [`docs/handoffs/saria-song-handoff.md`](docs/handoffs/saria-song-handoff.md).
+The full brief is in [`docs/handoffs/saria-song-handoff.md`](docs/handoffs/saria-song-handoff.md). To pick the
+project up from scratch (for example in a new session), start with
+[`docs/handoffs/saria-song-status-2026-10-09.md`](docs/handoffs/saria-song-status-2026-10-09.md).
 
 ## Requirements
 
