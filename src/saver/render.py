@@ -148,10 +148,6 @@ def count_fireflies(width: int, height: int) -> int:
     return max(14, min(40, round(width * height / 90_000)))
 
 
-def lerp_color(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
-    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))  # type: ignore[return-value]
-
-
 def vignette_amount(nx: float, ny: float) -> float:
     """0 in the (slightly high) centre, rising smoothly to 1 at the corners.
     nx, ny are -1..1 across the monitor."""
@@ -213,34 +209,44 @@ def make_glow_sprites(radius: int, color: tuple[int, int, int]):
 
 
 def make_background(width: int, height: int, colors: Colors, rng: random.Random):
-    """One monitor's backdrop: a soft vignette, dithered so dark bands cannot show."""
-    import pygame
+    """One monitor's backdrop: a soft vignette with no visible banding.
 
+    This is a dark gradient that spans only ~10 colour levels, so rounding it to
+    8 bits leaves contour steps, which show as blocks on a panel that reveals
+    dark detail. The cure is to keep the gradient in floating point at full
+    resolution and add uniform noise BEFORE rounding: floor(v + u) has expected
+    value v, so the steps dissolve into fine grain with no bias. (Adding noise
+    to an already-rounded gradient does not remove the steps; an earlier version
+    did exactly that.) Pillow does the per-pixel work in C, so this stays fast.
+    """
+    import pygame
+    from PIL import Image, ImageMath
+
+    # The vignette is smooth, so sample it coarsely and let a bicubic float
+    # resize fill in the pixels in between.
     sw, sh = max(2, width // 40), max(2, height // 40)
-    small = pygame.Surface((sw, sh))
-    for j in range(sh):
-        for i in range(sw):
-            nx = (i + 0.5) / sw * 2 - 1
-            ny = (j + 0.5) / sh * 2 - 1
-            small.set_at((i, j), lerp_color(colors.background, colors.background_edge, vignette_amount(nx, ny)))
-    surf = pygame.transform.smoothscale(small, (width, height))
-    # A dark gradient spans only ~10 colour levels, which shows as visible rings.
-    # +0/+1 noise on the low bits breaks the contours up. White noise has no
-    # visible seams, but a single repeating tile would show up as a faint grid
-    # (it did: autocorrelation 0.88 at the tile period), so cells pick randomly
-    # among several tiles and flip them.
-    size = 256
-    to_bit = bytes(b & 1 for b in range(256))
-    tiles = [
-        pygame.image.frombytes(rng.randbytes(size * size * 3).translate(to_bit), (size, size), "RGB")
-        for _ in range(8)
-    ]
-    for y in range(0, height, size):
-        for x in range(0, width, size):
-            tile = tiles[rng.randrange(len(tiles))]
-            tile = pygame.transform.flip(tile, rng.random() < 0.5, rng.random() < 0.5)
-            surf.blit(tile, (x, y), special_flags=pygame.BLEND_RGB_ADD)
-    return surf
+    coarse = Image.new("F", (sw, sh))
+    coarse.putdata([vignette_amount((i + 0.5) / sw * 2 - 1, (j + 0.5) / sh * 2 - 1) for j in range(sh) for i in range(sw)])
+    amount = coarse.resize((width, height), Image.BICUBIC)
+
+    # Work in strips: full-frame float images (33 MB each at 4K) stream through
+    # memory, while a strip stays in CPU cache. One noise field is shared by the
+    # three channels, so the grain is neutral grey rather than speckled colour.
+    strip_height = 256
+    planes = [Image.new("L", (width, height)) for _ in range(3)]
+    for top in range(0, height, strip_height):
+        rows = min(strip_height, height - top)
+        box = (0, top, width, top + rows)
+        amount_strip = amount.crop(box)
+        noise = Image.frombytes("L", (width, rows), rng.randbytes(width * rows)).convert("F")
+        noise = noise.point(lambda x: x / 256.0)  # uniform in [0, 1)
+        for c in range(3):
+            centre, edge = colors.background[c], colors.background_edge[c]
+            value = amount_strip.point(lambda x, a=centre, b=edge: x * (b - a) + a)  # float colour level, e.g. 17.3
+            # F -> L truncates, so this is floor(value + noise).
+            planes[c].paste(ImageMath.lambda_eval(lambda a: a["v"] + a["n"], v=value, n=noise).convert("L"), (0, top))
+    img = Image.merge("RGB", planes)
+    return pygame.image.frombytes(img.tobytes(), img.size, "RGB")
 
 
 class MonitorScene:

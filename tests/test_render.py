@@ -135,11 +135,6 @@ def test_vignette_is_dark_centre_to_bright_corner():
     assert samples == sorted(samples)
 
 
-def test_lerp_color():
-    assert render.lerp_color((0, 0, 0), (100, 200, 50), 0.5) == (50, 100, 25)
-    assert render.lerp_color((10, 10, 10), (20, 20, 20), 0) == (10, 10, 10)
-
-
 # --- pygame drawing (headless) ---------------------------------------------
 
 
@@ -212,11 +207,52 @@ def test_nothing_is_drawn_outside_a_monitor_area(pg):
     assert set(below_second) == {config.from_dict({}).colors.background_edge}
 
 
-def test_background_has_no_exact_tile_repetition(pg):
-    # The dither must not repeat on a fixed period (it once did at 128 px, a faint grid).
-    surf = render.make_background(1024, 256, config.from_dict({}).colors, random.Random(4))
-    row = lambda x: [surf.get_at((x + i, 128))[1] for i in range(256)]  # noqa: E731
-    assert row(0) != row(256) or row(256) != row(512)
+def _ideal_level(colors, channel, x, y, w, h):
+    """The exact (unrounded) colour level the vignette should have at a pixel."""
+    amount = render.vignette_amount((x + 0.5) / w * 2 - 1, (y + 0.5) / h * 2 - 1)
+    centre, edge = colors.background[channel], colors.background_edge[channel]
+    return centre + (edge - centre) * amount
+
+
+def test_background_dither_is_unbiased_so_gradient_steps_cannot_form(pg):
+    # Regression for the blocky look on Spirit Temple's 1440p monitor. The gradient only
+    # spans ~10 colour levels. Noise added after rounding (the old code) left 1-level
+    # rectangular steps and shifted everything up by ~0.5 level. Noise added before rounding
+    # gives, on average, exactly the unrounded gradient, so any patch's mean must match it.
+    colors = config.from_dict({}).colors
+    w, h = 1280, 720
+    surf = render.make_background(w, h, colors, random.Random(4))
+    for x0, y0 in [(40, 40), (580, 300), (1100, 600), (560, 20), (20, 610)]:  # each patch stays inside 1280x720
+        size = 100
+        for channel in range(3):
+            measured = sum(surf.get_at((x, y))[channel] for x in range(x0, x0 + size) for y in range(y0, y0 + size)) / size**2
+            expected = sum(_ideal_level(colors, channel, x, y, w, h) for x in range(x0, x0 + size) for y in range(y0, y0 + size)) / size**2
+            assert abs(measured - expected) < 0.12, (x0, y0, channel, measured, expected)
+
+
+def test_background_has_grain_not_flat_bands(pg):
+    # Dither means neighbouring pixels differ by a level now and then; a banded gradient
+    # would be perfectly flat over long runs.
+    colors = config.from_dict({}).colors
+    surf = render.make_background(800, 600, colors, random.Random(2))
+    row = [surf.get_at((x, 300))[1] for x in range(200, 600)]
+    assert len(set(row)) >= 2
+    assert sum(1 for a, b in zip(row, row[1:]) if a != b) > 40  # many level changes, not a few steps
+
+
+def test_background_has_no_seams_between_processing_strips(pg):
+    # The background is built in 256-row strips; row averages must flow across the joins.
+    colors = config.from_dict({}).colors
+    w, h = 1200, 700
+    surf = render.make_background(w, h, colors, random.Random(5))
+    for seam in (256, 512):
+        means = [sum(surf.get_at((x, y))[1] for x in range(100, 1100)) / 1000 for y in range(seam - 6, seam + 6)]
+        assert max(abs(b - a) for a, b in zip(means, means[1:])) < 0.1, (seam, means)
+
+
+def test_background_handles_sizes_that_are_not_strip_multiples(pg):
+    for w, h in [(1000, 700), (333, 257), (64, 64), (2, 2)]:
+        assert render.make_background(w, h, config.from_dict({}).colors, random.Random(1)).get_size() == (w, h)
 
 
 def test_font_fallback_uses_builtin_when_nothing_matches(pg):
