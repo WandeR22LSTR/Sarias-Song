@@ -12,8 +12,9 @@ on the Ice Cavern hub.
 > tooltip, menu and Settings; config changes applying on the next launch; the saver covering
 > both monitors (one at negative coordinates) and hiding the taskbar; Segoe UI Light; exit on a
 > key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
-> on a double-click; and, after fixes, no visible banding on the 1440p monitor. Not yet confirmed:
-> the clock layout retest, second-instance guard, Exit, autostart, streaming and the 8-hour soak
+> on a double-click; and, after fixes, no visible banding on the 1440p monitor and a clock that
+> stays put as its digits change. Not yet confirmed:
+> second-instance guard, Exit, autostart, streaming and the 8-hour soak
 > (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
@@ -196,7 +197,7 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] Text is sharp, not blurry (DPI scaling is handled). The display scaling % was not reported.
 - [x] Clock font: the thin Segoe UI Light look. (Log: `C:\WINDOWS\Fonts\segoeuil.ttf`.)
 - [x] Fireflies drift slowly and smoothly; no tearing, stutter or visible trails. (Reported fine.)
-- [ ] The clock does not shift or change width when a digit changes (needs the fixed-grid layout; retest).
+- [x] The clock does not shift or change width when a digit changes (fixed-grid layout; confirmed on Spirit Temple).
 - [x] Moving the mouse or pressing keys during the first 2 seconds does nothing.
 - [x] After 2 seconds a **key press** exits (this checks that the saver really got keyboard focus) and so does a
       **real mouse move**. (Log: `exit on key`, `exit on mouse_move`.)
