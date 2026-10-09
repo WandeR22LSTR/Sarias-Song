@@ -1,6 +1,6 @@
 import math
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -261,6 +261,84 @@ def test_dirty_rect_restore_leaves_no_trails(pg):
     r2.draw_first_frame()
     r2.frame(NOW, 29 * 7.0)
     assert pg.image.tobytes(screen2, "RGB") == incremental
+
+
+def _snapshot(pg, renderer, screen):
+    return pg.image.tobytes(renderer.background, "RGB"), pg.image.tobytes(screen, "RGB")
+
+
+def _same_as_a_fresh_render(pg, size, monitors, steps, seed=3, **cfg):
+    """Render `steps` incrementally, then render only the last step on a fresh renderer."""
+    screen, r = make_renderer(pg, monitors, size, seed=seed, **cfg)
+    r.draw_first_frame()
+    for now, t in steps:
+        r.frame(now, t)
+    incremental = _snapshot(pg, r, screen)
+    screen2, r2 = make_renderer(pg, monitors, size, seed=seed, **cfg)
+    r2.draw_first_frame()
+    r2.frame(*steps[-1])
+    return incremental, _snapshot(pg, r2, screen2)
+
+
+def _steps(count=40, every=13):
+    # 40 steps of 13 s: well past several minute and second changes, and the clock drifts a pixel or two.
+    return [(NOW + timedelta(seconds=i * every), i * every * 1.0) for i in range(count)]
+
+
+def test_baked_glow_stays_exact_through_text_changes_and_drift(pg):
+    # The glow is baked into the backdrop, then taken off and put back on as the time and the
+    # drift change. After all that, backdrop and screen must equal a fresh render byte for byte.
+    incremental, fresh = _same_as_a_fresh_render(
+        pg, (960, 540), [Rect(0, 0, 960, 540)], _steps(), clock={"show_seconds": True}
+    )
+    assert incremental == fresh
+
+
+def test_baked_glow_comes_off_exactly_even_when_a_bright_background_saturates(pg):
+    # Taking a glow off by subtracting it is only exact while adding it never saturated at 255.
+    # A bright custom background does saturate, so the glow is removed by restoring the saved
+    # pixels instead. This pins that down.
+    bright = {"colors": {"background": "#f4f4f4", "background_edge": "#ffffff", "accent": "#ffffff"}}
+    incremental, fresh = _same_as_a_fresh_render(
+        pg, (800, 450), [Rect(0, 0, 800, 450)], _steps(), clock={"show_seconds": True}, **bright
+    )
+    assert incremental == fresh
+
+
+def test_the_glow_changes_the_backdrop_only_when_the_clock_changes(pg):
+    screen, r = make_renderer(pg, [Rect(0, 0, 960, 540)], (960, 540), seed=2)
+    r.draw_first_frame()
+    scene = r.scenes[0]
+    assert scene.prepare(NOW, 100.0), "the first frame bakes the glow"
+    assert scene.prepare(NOW, 100.0) == []  # nothing changed
+    assert scene.prepare(NOW, 100.2) == []  # a fifth of a second: the drift is under a pixel
+    assert scene.prepare(NOW + timedelta(minutes=1), 100.2), "a new time needs a new glow"
+
+
+def test_a_steady_frame_does_not_push_the_whole_glow_to_the_display(pg):
+    screen, r = make_renderer(pg, [Rect(0, 0, 960, 540)], (960, 540), seed=2)
+    r.draw_first_frame()
+    for i in range(3):
+        r.frame(NOW, 100.0 + i / 30)
+    glow = r.scenes[0]._glow_surf
+    rects = r.frame(NOW, 100.1)
+    assert rects and all(x.width * x.height < glow.get_width() * glow.get_height() for x in rects)
+    keys = [(x.x, x.y, x.w, x.h) for x in rects]
+    assert len(keys) == len(set(keys)), "each rectangle is reported once"
+
+
+def test_the_glow_is_never_baked_outside_its_own_monitor(pg):
+    # Monitors smaller than the glow, with a gap between them: nothing may spill into the gap.
+    monitors = [Rect(0, 0, 80, 60), Rect(120, 0, 80, 60)]
+    screen, r = make_renderer(pg, monitors, (200, 60), seed=1)
+    r.draw_first_frame()
+    for i in range(10):
+        r.frame(NOW + timedelta(seconds=i * 60), i * 40.0)
+    assert r.scenes[0]._glow_surf.get_width() > 80, "the test needs a glow wider than the monitor"
+    edge = config.from_dict({}).colors.background_edge
+    for surface in (r.background, screen):
+        gap = {surface.get_at((x, y))[:3] for x in range(80, 120) for y in range(60)}
+        assert gap == {edge}
 
 
 def test_nothing_is_drawn_outside_a_monitor_area(pg):

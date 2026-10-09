@@ -355,8 +355,23 @@ class MonitorScene:
         self._text_key: tuple[str, str] | None = None
         self._time_surf = self._date_surf = self._glow_surf = None
         self._glyphs: dict[tuple[str, bool], object] = {}
-        self._rng = random.Random(seed ^ 0x5EED)  # dither noise for the halo
+        self._seed = seed
         self.background = make_background(area.w, area.h, cfg.colors, random.Random(seed))
+        # The clock's glow is baked into the window-sized backdrop (set by attach) instead of
+        # being blended onto the screen every frame: it only changes when the time text does,
+        # or when the clock drifts a pixel. These track what is baked and what was under it.
+        self._backdrop = None
+        self._baked: object | None = None  # the pygame.Rect the glow currently occupies
+        self._baked_origin: tuple[int, int] | None = None
+        self._saved = None  # pristine backdrop pixels under the baked glow
+        self._halo_stale = True  # _glow_surf was rebuilt and is not baked yet
+        self._text_pos = (0, 0)
+        self._drift = (0, 0)
+
+    def attach(self, backdrop) -> None:
+        """Take the window-sized backdrop this scene bakes its glow into."""
+        self._backdrop = backdrop
+        self.background = None  # the per-monitor copy is no longer needed
 
     # -- clock text ---------------------------------------------------------
     def _metrics(self, char: str) -> tuple[int, int]:
@@ -424,31 +439,70 @@ class MonitorScene:
         canvas.fill((0, 0, 0))
         canvas.blit(self._compose_time(cells, time_width, white=True), (m, m))  # white glyphs: alpha onto black = coverage
         coverage = Image.frombytes("RGB", canvas.get_size(), pygame.image.tobytes(canvas, "RGB")).getchannel("G")
-        halo = make_halo(coverage, font_height, colors.accent, HALO_STRENGTH, self._rng)
+        # Seeded by the text, so a given time always gets the same grain (no shimmer when it
+        # recurs, and the incremental state can be compared exactly with a fresh render).
+        halo = make_halo(coverage, font_height, colors.accent, HALO_STRENGTH, random.Random(f"{self._seed}:{time_text}"))
         self._glow_surf = pygame.image.frombytes(halo.tobytes(), halo.size, "RGB")
         self._glow_margin = m
+        self._halo_stale = True
 
     # -- one frame ----------------------------------------------------------
-    def draw(self, screen, now: datetime, t: float) -> list:
-        """Draw this monitor's frame. Returns the rectangles that were touched."""
+    def prepare(self, now: datetime, t: float) -> list:
+        """Bring the clock up to date for this frame.
+
+        Updates the text, works out where the clock sits (it drifts a little), and bakes
+        the glow into the backdrop if the text or the position changed. Returns the
+        rectangles of the backdrop that changed (to be restored on screen); empty on the
+        great majority of frames, when nothing about the clock has changed.
+        """
         import pygame
 
         time_text, date_text = format_clock(now, self.cfg.clock)
         self._refresh_text(time_text, date_text)
+        dx, dy = clock_drift(t, self.area.w, self.area.h)
+        tw, th = self._time_surf.get_size()
+        # Layout: time centred slightly above middle, date underneath.
+        tx = self.area.x + (self.area.w - tw) // 2 + dx
+        ty = self.area.y + int(self.area.h * 0.46) - th // 2 + dy
+        self._text_pos, self._drift = (tx, ty), (dx, dy)
+
+        origin = (tx - self._glow_margin, ty - self._glow_margin)
+        if not self._halo_stale and origin == self._baked_origin:
+            return []
+        backdrop = self._backdrop
+        changed: list = []
+        if self._baked is not None:
+            # Take the old glow off by putting back the pixels that were under it. (Not by
+            # subtracting it: that is only exact while nothing saturates, which a bright
+            # custom background colour would break.)
+            backdrop.blit(self._saved, self._baked.topleft)
+            changed.append(self._baked)
+        # Never bake outside this monitor's own area (a glow can be bigger than a small screen).
+        wanted = pygame.Rect(origin, self._glow_surf.get_size()).clip(self.area)
+        if wanted.width and wanted.height:
+            self._saved = backdrop.subsurface(wanted).copy()
+            part = pygame.Rect(wanted.x - origin[0], wanted.y - origin[1], wanted.w, wanted.h)
+            backdrop.blit(self._glow_surf, wanted.topleft, area=part, special_flags=pygame.BLEND_RGB_ADD)
+            changed.append(wanted)
+            self._baked = wanted
+        else:
+            self._baked = self._saved = None
+        self._baked_origin, self._halo_stale = origin, False
+        return changed
+
+    def draw(self, screen, t: float) -> list:
+        """Draw the fireflies and the text (call prepare first). Returns the rectangles touched."""
+        import pygame
+
         touched: list[pygame.Rect] = []
         screen.set_clip(self.area)
         ax, ay = self.area.x, self.area.y
+        tx, ty = self._text_pos
+        dx, _ = self._drift
+        _, th = self._time_surf.get_size()
 
-        # Layout: time centred slightly above middle, date underneath.
-        dx, dy = clock_drift(t, self.area.w, self.area.h)
-        tw, th = self._time_surf.get_size()
-        tx = ax + (self.area.w - tw) // 2 + dx
-        ty = ay + int(self.area.h * 0.46) - th // 2 + dy
-
-        # (Renderer.frame has already restored the background under last frame's
-        # rectangles.) Draw back to front: halo, fireflies, then the text.
-        touched.append(screen.blit(self._glow_surf, (tx - self._glow_margin, ty - self._glow_margin), special_flags=pygame.BLEND_RGB_ADD))
-
+        # (Renderer.frame has already restored the backdrop, which carries the glow, under
+        # last frame's rectangles.) Draw back to front: fireflies, then the text.
         for spec in self.fireflies:
             ux, uy, bright = firefly_state(spec, t)
             sprite_set = self.sprites[spec.size_class]
@@ -482,7 +536,7 @@ class Renderer:
         self.background.fill(cfg.colors.background_edge)
         for scene in self.scenes:
             self.background.blit(scene.background, scene.area.topleft)
-            scene.background = None  # now only the window-sized copy is kept
+            scene.attach(self.background)  # each scene bakes its clock glow in here
         self._dirty: list = []
 
     def draw_first_frame(self) -> None:
@@ -490,11 +544,22 @@ class Renderer:
 
     def frame(self, now: datetime, t: float) -> list:
         """Render one frame; returns the rectangles to push to the display."""
-        for r in self._dirty:
+        # Put the backdrop back under everything drawn last frame, and under any part of
+        # it that changed this frame (a new glow baked in because the time text changed).
+        restore = list(self._dirty)
+        for scene in self.scenes:
+            restore.extend(scene.prepare(now, t))
+        for r in restore:
             self.screen.blit(self.background, r, r)
-        updates = list(self._dirty)
         self._dirty = []
         for scene in self.scenes:
-            self._dirty.extend(scene.draw(self.screen, now, t))
-        updates.extend(self._dirty)
-        return updates
+            self._dirty.extend(scene.draw(self.screen, t))
+        # The still-standing clock appears twice (restored, then redrawn at the same spot);
+        # tell the display about each rectangle once, since copying it is the costly part.
+        unique, seen = [], set()
+        for r in restore + self._dirty:
+            key = (r.x, r.y, r.w, r.h)
+            if key not in seen:
+                seen.add(key)
+                unique.append(r)
+        return unique

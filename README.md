@@ -109,9 +109,13 @@ stops the saver: bad values fall back to the defaults, and the problem is writte
   the Windows screensaver arguments `/s` (run), `/c` (open config), `/p` (preview, exits at once), so it could
   become a real `.scr` later. With no argument it runs, unlike a real `.scr`.
 * **Rendering** is built for long runs: a pre-baked background and dirty-rectangle updates,
-  capped at 30 fps. A steady frame takes about 2.4 ms on 1080p, 4 ms on 1440p and 7 ms across
-  both together (4480x1440) in headless tests in the cloud, so it is not a measure of Spirit Temple.
-  The clock drifts a few pixels over minutes to avoid burn-in.
+  capped at 30 fps. The clock's glow is baked into the backdrop and only redone when the time text
+  changes or the clock drifts a pixel (it drifts a few pixels over minutes to avoid burn-in), so a
+  normal frame only touches the fireflies and the digits and tells the display about each rectangle once.
+  Measured headless in the cloud on a two-monitor layout (4480x1440): a frame's work fell from 8-9 ms to
+  about 3 ms and the pixels pushed per frame from 5-7 M to 1-1.5 M. Measured on Spirit Temple (two
+  monitors, seconds on) BEFORE that change: 36% of one core (3.0% of the whole 12-thread PC), 12.7 ms
+  of work per frame, 108-113 MB memory with no growth over 8 minutes. Compare your `perf:` lines.
 * **No banding.** The background, the clock's glow and the fireflies are all only a few colour levels
   bright, so rounding them to 8 bits leaves visible steps on a panel that shows dark detail. Each is
   computed in floating point and given a little noise *before* the final rounding, which turns the
