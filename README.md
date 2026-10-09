@@ -250,7 +250,12 @@ automatically (Windows drops the request when the thread dies).
       (Reported by Luca 2026-10-09: the saver was on screen, the PC went to sleep and stayed off for at least a
       minute, and requiem woke it. Kernel-Power logged Id 42 at 11:30:22 PM and Id 107 at 11:30:23 PM; those
       timestamps are one second apart despite the minute-long sleep, which is unexplained and does not affect
-      the result. The state of the saver after waking has not been reported yet.)
+      the result. Luca was in bed, not at the PC. After waking: the Windows lock screen, then the normal
+      desktop after signing in. The saver had already closed itself as the PC went to sleep:
+      `saver.log` has `exit on mouse_move` 60 ms before the sleep event, i.e. Windows sent a mouse move
+      during the sleep/lock sequence and the saver treated it as input. This is accepted behaviour: the saver
+      does not outlive a sleep or lock. The exit line now also logs the pointer position, so a system-made
+      move can be told from a real one.)
 
 **Soak (acceptance criterion)**
 - [ ] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5

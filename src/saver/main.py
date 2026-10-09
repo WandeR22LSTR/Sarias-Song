@@ -157,11 +157,15 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
             now = time.monotonic()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
+                    log.info("exit on QUIT (the window was closed, or the system asked the saver to quit)")
                     running = False
                     break
                 kind = classify(pygame, event)
-                if kind and policy.should_exit(kind, now, getattr(event, "pos", None)):
-                    log.info("exit on %s", kind)
+                pos = getattr(event, "pos", None)
+                if kind and policy.should_exit(kind, now, pos):
+                    # The position matters: a stray move that Windows generates (sleep, lock, a display
+                    # change) tends to land somewhere odd, such as a corner, unlike a real hand on the mouse.
+                    log.info("exit on %s%s", kind, f" at {tuple(pos)}" if pos is not None else "")
                     running = False
                     break  # one event is enough; the rest of this batch must not log again
             if not running:

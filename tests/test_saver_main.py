@@ -247,6 +247,25 @@ def test_window_close_event_ends_the_saver(loop_env, monkeypatch):
     assert code == 0 and len(frames) == 1
 
 
+def test_the_exit_reason_is_logged_for_a_quit_message(loop_env, monkeypatch, caplog):
+    # A quit that comes from the system (not from input) used to leave no reason in the log.
+    pygame = loop_env
+    with caplog.at_level(logging.INFO, logger="loop-test"):
+        run_with_scripted_events(pygame, monkeypatch, [[], [pygame.event.Event(pygame.QUIT)]])
+    assert any(r.getMessage().startswith("exit on QUIT") for r in caplog.records)
+
+
+def test_a_mouse_exit_logs_where_the_pointer_was(loop_env, monkeypatch, caplog):
+    # Seen on Spirit Temple: "exit on mouse_move" at the instant the PC went to sleep, with nobody
+    # at the PC. The position helps tell a stray, system-made move from a real one.
+    pygame = loop_env
+    move = lambda p: pygame.event.Event(pygame.MOUSEMOTION, pos=p, rel=(1, 1), buttons=(0, 0, 0))  # noqa: E731
+    script = [[], [], [], [], [move((10, 10))], [move((1919, 1079))]]
+    with caplog.at_level(logging.INFO, logger="loop-test"):
+        run_with_scripted_events(pygame, monkeypatch, script, grace_seconds=1.0)
+    assert "exit on mouse_move at (1919, 1079)" in [r.getMessage() for r in caplog.records]
+
+
 def test_animation_speed_scales_time(loop_env, monkeypatch):
     pygame = loop_env
     _, normal = run_with_scripted_events(pygame, monkeypatch, [[], [], []], animation_speed=1.0)
