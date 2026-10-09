@@ -144,9 +144,45 @@ to a file at stream start and end. Answers where commands run and what they rece
 - Apollo's behaviour has changed between versions already (monitor off, then mirror), and may again.
 - Lock screens and sleep interact with all of this: the saver already closes itself when the PC sleeps.
 
-## Decisions for Luca
+## Decisions
 
-1. Is my reading of the use error right?
-2. While streaming, should the saver ignore all input, or only the client's?
-3. When a stream ends, should the saver stay until someone touches the physical mouse or keyboard, or exit?
-4. If Apollo can only mirror, what is acceptable instead?
+Answered by Luca on 2026-10-09:
+
+1. **The use error is as described above.** Confirmed.
+2. **While streaming, ignore only the client's input**, if that is technically possible. If the only way to make
+   the feature work is to ignore all input, that is acceptable.
+3. **When a stream ends, the saver stays** until someone uses the **physical** mouse or keyboard. Luca noted this
+   would also solve the end-stream keybind problem on its own.
+4. **Mirroring:** Luca confirms the stream does mirror. *Why* (Windows' Duplicate mode, or an Apollo setting) is
+   still to be found out. Open.
+
+What this does to the plan: decisions 2 and 3 both depend on telling client input from physical input, so
+**experiment E2 (input provenance) becomes the first thing to do.** If Apollo's input is flagged as injected, then
+"ignore the client, stay until the hardware is touched" is one rule, applied all the time, and it also covers the
+quit chord (the keys arrive while the stream is still up, and are ignored). Stream detection is then only needed
+for starting the saver by itself and for choosing the physical-only monitors.
+
+Still open: if Apollo can only mirror, what is acceptable instead?
+
+## Running E2 (the input probe)
+
+`src/inputprobe.py` is a read-only diagnostic. For a set time it listens to keyboard and mouse input system-wide
+and records, for each event, whether Windows marked it as *injected* (made by software, as Apollo does for a
+client) or physical (real hardware). It does not change or block anything.
+
+Privacy: it records modifier keys (Shift, Ctrl, Alt, Win) by name and counts every other key without saying which,
+so it never captures what you type. Don't type anything private while it runs anyway.
+
+```powershell
+.\.venv\Scripts\python.exe .\src\inputprobe.py --seconds 90
+```
+
+While it runs, from the **client**: press and release Shift, move the mouse, click, then press the quit chord
+(that ends the stream, which is fine: the probe keeps running on the host). Then, on the **host's own keyboard
+and mouse**: press Shift, move the mouse, click. After the time is up it prints a summary and saves it to
+`logs\input-probe.txt`. The result to read is whether the client's events say `injected` and the physical ones
+say `physical`.
+
+Notes: the very first line is usually the release of the Enter key you pressed to start it (physical), which is
+normal. If the quit chord ends your session before you can read the output, that is fine: the probe keeps
+running on the host and the file is there when you are back. The probe needs no administrator rights.
