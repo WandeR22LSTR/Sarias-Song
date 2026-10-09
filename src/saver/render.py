@@ -16,7 +16,7 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Sequence
+from typing import Callable, NamedTuple, Sequence
 
 from config import ClockConfig, Colors, Config
 
@@ -46,6 +46,52 @@ def format_clock(now: datetime, clock: ClockConfig) -> tuple[str, str]:
     time_text += suffix
     date_text = f"{_WEEKDAYS[now.weekday()]}, {now.day} {_MONTHS[now.month - 1]}" if clock.show_date else ""
     return time_text, date_text
+
+
+class Cell(NamedTuple):
+    """One slot of the clock's fixed grid."""
+
+    text: str
+    x: int  # left edge of the slot, in pixels from the left of the clock
+    width: int
+    centered: bool  # glyphs sit centred in their slot; the AM/PM suffix is left-aligned
+
+
+def split_suffix(time_text: str) -> tuple[str, str]:
+    for suffix in (" AM", " PM"):
+        if time_text.endswith(suffix):
+            return time_text[: -len(suffix)], suffix
+    return time_text, ""
+
+
+def clock_cells(time_text: str, advance: Callable[[str], int]) -> tuple[list[Cell], int]:
+    """Lay the clock out on a fixed grid, so it has the same width and every
+    character the same position whatever the time is.
+
+    Centring the rendered string instead makes the clock breathe: digits have
+    different widths and kerning changes between pairs ("11", "47"), so the string
+    is wider or narrower from one tick to the next and every glyph slides to
+    re-centre it. Here each digit gets a slot as wide as the widest digit
+    (`advance` is the pixel width of a string in the clock's font). A 12-hour
+    time with a one-digit hour keeps an empty tens slot, and the AM/PM suffix
+    reserves room for the wider of "AM" and "PM".
+    """
+    body, suffix = split_suffix(time_text)
+    digit_width = max(advance(d) for d in "0123456789")
+    cells: list[Cell] = []
+    x = 0
+    if len(body.split(":")[0]) == 1:
+        cells.append(Cell(" ", 0, digit_width, True))
+        x = digit_width
+    for char in body:
+        width = digit_width if char.isdigit() else advance(char)
+        cells.append(Cell(char, x, width, True))
+        x += width
+    if suffix:
+        width = max(advance(" AM"), advance(" PM"))
+        cells.append(Cell(suffix, x, width, False))
+        x += width
+    return cells, x
 
 
 @dataclass(frozen=True)
@@ -308,10 +354,53 @@ class MonitorScene:
         self.fireflies = make_fireflies(seed, count_fireflies(area.w, area.h))
         self._text_key: tuple[str, str] | None = None
         self._time_surf = self._date_surf = self._glow_surf = None
+        self._glyphs: dict[tuple[str, bool], object] = {}
         self._rng = random.Random(seed ^ 0x5EED)  # dither noise for the halo
         self.background = make_background(area.w, area.h, cfg.colors, random.Random(seed))
 
     # -- clock text ---------------------------------------------------------
+    def _metrics(self, char: str) -> tuple[int, int]:
+        """(left ink offset, advance) of one character; the advance is how far the pen moves."""
+        found = self.time_font.metrics(char)
+        if found and found[0]:
+            minx, _maxx, _miny, _maxy, advance = found[0]
+            return minx, advance
+        return 0, self.time_font.size(char)[0]  # glyph missing from the font
+
+    def _advance(self, text: str) -> int:
+        """Pixel width of `text` in the clock font (the pen advance for a single character)."""
+        return self._metrics(text)[1] if len(text) == 1 else self.time_font.size(text)[0]
+
+    def _glyph(self, text: str, white: bool):
+        """A rendered glyph (or the AM/PM suffix), cached: the clock reuses ~12 of them forever."""
+        surface = self._glyphs.get((text, white))
+        if surface is None:
+            color = (255, 255, 255) if white else self.cfg.colors.text
+            surface = self._glyphs[(text, white)] = self.time_font.render(text, True, color)
+        return surface
+
+    def _compose_time(self, cells: list[Cell], width: int, white: bool = False):
+        """Draw each character centred in its own fixed slot (see clock_cells)."""
+        import pygame
+
+        # A little room each side so ink that overhangs the first or last slot is
+        # not clipped. The padding is constant, so the width stays constant too.
+        pad = self.time_font.get_height() // 10
+        surface = pygame.Surface((width + 2 * pad, self.time_font.get_height()), pygame.SRCALPHA)
+        for cell in cells:
+            if not cell.text.strip():
+                continue  # an empty slot
+            glyph = self._glyph(cell.text, white)
+            if cell.centered:
+                # Centre the glyph's advance box in the slot (what the type designer
+                # centred the ink in); the rendered surface starts at min(0, left ink offset).
+                minx, advance = self._metrics(cell.text)
+                x = pad + cell.x + (cell.width - advance) // 2 + min(0, minx)
+            else:
+                x = pad + cell.x
+            surface.blit(glyph, (x, 0))
+        return surface
+
     def _refresh_text(self, time_text: str, date_text: str) -> None:
         import pygame
 
@@ -319,7 +408,8 @@ class MonitorScene:
             return
         self._text_key = (time_text, date_text)
         colors = self.cfg.colors
-        self._time_surf = self.time_font.render(time_text, True, colors.text)
+        cells, time_width = clock_cells(time_text, self._advance)
+        self._time_surf = self._compose_time(cells, time_width)
         self._date_surf = self.date_font.render(date_text, True, colors.dim) if date_text else None
         # Soft halo: the text as white-on-black coverage, padded so the wide blur
         # has room, then blurred into a bloom (see make_halo).
@@ -332,7 +422,7 @@ class MonitorScene:
         pad_h = -(-(th + 2 * m) // HALO_SHRINK) * HALO_SHRINK
         canvas = pygame.Surface((pad_w, pad_h))
         canvas.fill((0, 0, 0))
-        canvas.blit(self.time_font.render(time_text, True, (255, 255, 255), (0, 0, 0)), (m, m))
+        canvas.blit(self._compose_time(cells, time_width, white=True), (m, m))  # white glyphs: alpha onto black = coverage
         coverage = Image.frombytes("RGB", canvas.get_size(), pygame.image.tobytes(canvas, "RGB")).getchannel("G")
         halo = make_halo(coverage, font_height, colors.accent, HALO_STRENGTH, self._rng)
         self._glow_surf = pygame.image.frombytes(halo.tobytes(), halo.size, "RGB")

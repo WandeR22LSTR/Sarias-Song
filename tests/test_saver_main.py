@@ -148,6 +148,30 @@ def test_a_burst_of_events_logs_the_exit_once(loop_env, monkeypatch, caplog):
     assert [r.getMessage() for r in caplog.records].count("exit on key") == 1
 
 
+def test_the_saver_logs_its_own_cpu_and_memory(loop_env, monkeypatch, caplog):
+    # Luca cannot watch Task Manager behind a fullscreen saver, so it reports to saver.log:
+    # a line after PERF_FIRST_REPORT_SECONDS, one per minute after that, and a total at exit.
+    pygame = loop_env
+    script = [[] for _ in range(30)]  # the fake clock runs 0.5 s per loop: 15 s, so the 10 s report fires
+    with caplog.at_level(logging.INFO, logger="loop-test"):
+        code, _ = run_with_scripted_events(pygame, monkeypatch, script)
+    assert code == 0
+    messages = [r.getMessage() for r in caplog.records]
+    periodic = [m for m in messages if m.startswith("perf: ")]
+    assert len(periodic) == 1, messages
+    assert "of one core" in periodic[0] and "logical processors" in periodic[0] and "frames, work avg" in periodic[0]
+    assert any(m.startswith("perf over the whole run") for m in messages), messages
+
+
+def test_a_short_run_logs_only_the_final_total(loop_env, monkeypatch, caplog):
+    pygame = loop_env
+    with caplog.at_level(logging.INFO, logger="loop-test"):
+        run_with_scripted_events(pygame, monkeypatch, [[], [], []])
+    messages = [r.getMessage() for r in caplog.records]
+    assert not [m for m in messages if m.startswith("perf: ")]
+    assert any(m.startswith("perf over the whole run") for m in messages)
+
+
 def test_small_mouse_jitter_is_ignored_but_a_real_move_exits(loop_env, monkeypatch):
     pygame = loop_env
     move = lambda p: pygame.event.Event(pygame.MOUSEMOTION, pos=p, rel=(1, 1), buttons=(0, 0, 0))  # noqa: E731

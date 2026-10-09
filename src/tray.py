@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import functools
 import sys
+import threading
 from pathlib import Path
 
 # Allow `python src/tray.py` from any working directory.
@@ -20,10 +21,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import applog  # noqa: E402
 import autostart  # noqa: E402
 import config  # noqa: E402
+import perfstats  # noqa: E402
 import winapi  # noqa: E402
 from launcher import SaverLauncher, open_config_file  # noqa: E402
 
 INSTANCE_MUTEX = "SariasSong.Tray"
+TRAY_PERF_FIRST_SECONDS = 60
+TRAY_PERF_EVERY_SECONDS = 300
 
 
 def _guarded(log, fn):
@@ -54,6 +58,10 @@ def run_tray() -> int:
     from icon import make_icon_image
 
     launcher = SaverLauncher(log)
+    # The tray's own CPU and memory, logged (after a minute, then every 5) so a
+    # slow leak over a long uptime would show up in logs\tray.log.
+    stop_reporting = threading.Event()
+    perfstats.start_reporter(log, "tray", TRAY_PERF_FIRST_SECONDS, TRAY_PERF_EVERY_SECONDS, stop_reporting)
     start_saver = _guarded(log, launcher.start)
     open_settings = _guarded(log, open_config_file)
 
@@ -68,6 +76,7 @@ def run_tray() -> int:
     try:
         icon.run()  # blocks until Exit; `instance` (the mutex) stays referenced meanwhile
     finally:
+        stop_reporting.set()
         launcher.stop()
         log.info("tray stopped")
     return 0

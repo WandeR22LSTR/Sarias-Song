@@ -49,6 +49,76 @@ def test_clock_text_ignores_the_locale(monkeypatch):
     assert render.format_clock(datetime(2026, 3, 2, 0, 0), clock())[1] == "Monday, 2 March"
 
 
+# --- clock layout: a fixed grid, so the clock never breathes ------------------
+
+# Widths of a font with proportional digits (a "1" is much narrower than a "0"),
+# like Inter or, evidently, the font on Spirit Temple. Centering such a string makes the
+# whole clock change width from one tick to the next.
+_PROPORTIONAL = {"0": 20, "1": 11, "2": 19, "3": 19, "4": 21, "5": 19, "6": 20, "7": 17, "8": 20, "9": 20,
+                 ":": 8, " ": 7, "A": 22, "P": 18, "M": 26}  # fmt: skip
+
+
+def _fake_advance(text):
+    return sum(_PROPORTIONAL[c] for c in text)
+
+
+def _layouts(clock_cfg, times):
+    seen = set()
+    for hour, minute, second in times:
+        text, _ = render.format_clock(datetime(2026, 1, 1, hour, minute, second), clock_cfg)
+        cells, total = render.clock_cells(text, _fake_advance)
+        seen.add((total, tuple((c.x, c.width, c.centered) for c in cells)))
+    return seen
+
+
+def test_24h_layout_is_identical_for_every_minute_of_the_day():
+    every_minute = [(h, m, 0) for h in range(24) for m in range(60)]
+    assert len(_layouts(clock(), every_minute)) == 1
+
+
+def test_24h_layout_with_seconds_is_identical_for_every_second():
+    assert len(_layouts(clock(show_seconds=True), [(h, m, s) for h in (0, 1, 9, 10, 23) for m in (0, 1, 11, 59) for s in range(60)])) == 1
+
+
+def test_12h_layout_is_identical_for_every_hour_and_am_pm():
+    # One-digit hours keep an empty tens slot; "AM" and "PM" share one suffix slot.
+    times = [(h, m, 0) for h in range(24) for m in (0, 11, 47)]
+    assert len(_layouts(clock(format_24h=False), times)) == 1
+    assert len(_layouts(clock(format_24h=False, show_seconds=True), [(h, 5, s) for h in range(24) for s in (0, 11, 59)])) == 1
+
+
+def test_digits_that_stay_the_same_never_move_when_others_change():
+    # The reported bug: when one digit changed, the others slid sideways.
+    def xs(text):
+        cells, _ = render.clock_cells(text, _fake_advance)
+        return [c.x for c in cells]
+
+    assert xs("11:11") == xs("00:00") == xs("47:58") == xs("08:59")
+    assert xs("00:00")[2] == 42  # the colon's slot, always
+
+
+def test_cell_slots_are_as_wide_as_the_widest_digit_and_do_not_overlap():
+    cells, total = render.clock_cells("12:34", _fake_advance)
+    assert all(c.width == 21 for c in cells if c.text.isdigit())  # the "4"
+    assert [c.x for c in cells] == [0, 21, 42, 50, 71]
+    assert total == 92 == cells[-1].x + cells[-1].width
+
+
+def test_12h_single_digit_hour_gets_an_empty_tens_slot():
+    cells, _ = render.clock_cells("3:04 PM", _fake_advance)
+    assert [c.text for c in cells] == [" ", "3", ":", "0", "4", " PM"]
+    # ...and sits on exactly the same grid as a two-digit hour, so nothing moves at 9:59 -> 10:00.
+    ten, _ = render.clock_cells("10:04 AM", _fake_advance)
+    assert [c.x for c in cells] == [c.x for c in ten]
+
+
+def test_the_am_pm_suffix_is_left_aligned_in_a_slot_wide_enough_for_either():
+    am, _ = render.clock_cells("3:04 AM", _fake_advance)
+    pm, _ = render.clock_cells("3:04 PM", _fake_advance)
+    assert am[-1].width == pm[-1].width == max(_fake_advance(" AM"), _fake_advance(" PM"))
+    assert not am[-1].centered and not pm[-1].centered
+
+
 # --- window layout ---------------------------------------------------------
 
 
@@ -324,6 +394,70 @@ def test_halo_is_centred_on_the_text_and_tinted_with_the_accent(pg):
     # Brightness ratio between channels follows the accent colour (60 : 200 : 100).
     means = [sum(halo.getchannel(c).resize((1, 1), Image.BOX).getdata()) for c in "RGB"]
     assert means[1] > means[2] > means[0]
+
+
+# A font whose digits have different widths, so these tests can actually fail: Inter and
+# Liberation Sans vary by tens to hundreds of pixels with the old layout (see the font survey in
+# the commit message). Arial is last for Windows, where it is merely tabular and the tests still pass.
+PROPORTIONAL_FONT = "Inter, Liberation Sans, Arial"
+
+
+def _sample_times():
+    return [(h, m, s) for h in (0, 1, 7, 9, 10, 11, 12, 13, 21, 23) for m in (0, 1, 11, 47, 59) for s in (0, 1, 11, 58)]
+
+
+@pytest.mark.parametrize(
+    "clock_cfg",
+    [{}, {"show_seconds": True}, {"format_24h": False}, {"format_24h": False, "show_seconds": True}],
+)
+def test_rendered_clock_has_one_width_for_every_time(pg, clock_cfg):
+    # The real font, through the real renderer: the clock surface and its halo are the
+    # same size at every tick, so centring them can never shift anything.
+    cfg = config.from_dict({"clock": clock_cfg, "font": PROPORTIONAL_FONT})
+    scene = render.MonitorScene(Rect(0, 0, 1280, 720), cfg, seed=1)
+    sizes, halos = set(), set()
+    for hour, minute, second in _sample_times():
+        text, date = render.format_clock(datetime(2026, 10, 8, hour, minute, second), cfg.clock)
+        scene._refresh_text(text, date)
+        sizes.add(scene._time_surf.get_size())
+        halos.add(scene._glow_surf.get_size())
+    assert len(sizes) == 1 and len(halos) == 1, (sizes, halos)
+
+
+def test_the_colon_does_not_move_when_the_digits_change(pg):
+    # Look at the actual pixels: where the colon's ink is, in the composed clock.
+    cfg = config.from_dict({"font": PROPORTIONAL_FONT})
+    scene = render.MonitorScene(Rect(0, 0, 1280, 720), cfg, seed=1)
+
+    def colon_ink(text):
+        scene._text_key = None
+        scene._refresh_text(text, "")
+        cells, _ = render.clock_cells(text, scene._advance)
+        colon = next(c for c in cells if c.text == ":")
+        pad = scene.time_font.get_height() // 10
+        region = pg.Rect(pad + colon.x, 0, colon.width, scene._time_surf.get_height())
+        mask = pg.mask.from_surface(scene._time_surf.subsurface(region))
+        return [tuple(r) for r in mask.get_bounding_rects()]
+
+    reference = colon_ink("00:00")
+    assert reference, "the colon should have drawn something"
+    for text in ("11:11", "47:58", "23:59", "08:07", "10:10"):
+        assert colon_ink(text) == reference, text
+
+
+def test_every_digit_is_drawn_inside_its_own_slot_without_clipping(pg):
+    # Ink must not be cut off at the edges of the padded surface, whatever the digits.
+    cfg = config.from_dict({"font": PROPORTIONAL_FONT})
+    scene = render.MonitorScene(Rect(0, 0, 1280, 720), cfg, seed=1)
+    for text in ("00:00", "11:11", "77:77", "88:88", "44:44"):
+        scene._text_key = None
+        scene._refresh_text(text, "")
+        surface = scene._time_surf
+        mask = pg.mask.from_surface(surface)
+        box = mask.get_bounding_rects()
+        left = min(r.left for r in box)
+        right = max(r.right for r in box)
+        assert left > 0 and right < surface.get_width(), (text, left, right, surface.get_width())
 
 
 def test_clock_halo_surface_is_padded_to_a_multiple_of_the_shrink_factor(pg):

@@ -118,6 +118,18 @@ stops the saver: bad values fall back to the defaults, and the problem is writte
   steps into fine grain. Each of these was a real bug reported from the 1440p monitor.
 * **Logs** go to `logs\tray.log`, `logs\saver.log` and `logs\saver-stderr.log`. When something misbehaves,
   send these.
+* **The app reports its own CPU and memory**, because the saver covers the screen and cannot be watched in
+  Task Manager. `logs\saver.log` gets a `perf:` line 10 seconds after the saver starts and then one a minute
+  (about 480 lines over 8 hours), plus a whole-run total when it exits; `logs\tray.log` gets a `tray perf:`
+  line after a minute and then every 5 minutes. A line reads like
+  `cpu 4.3% of one core (1.08% of all 4 logical processors, as Task Manager shows), memory 57 MB; 301 frames,
+  work avg 1.3 ms, worst 12 ms`. "% of one core" is 100 when a core is fully busy; the bracketed figure is
+  the share of the whole PC, which is what Task Manager's CPU column shows. Memory is the working set, as in
+  Task Manager. A memory figure that keeps climbing across an 8-hour run would be a leak.
+* **The clock is laid out on a fixed grid.** Each digit has its own slot as wide as the widest digit, a
+  one-digit hour in 12-hour mode keeps an empty tens slot, and AM/PM share one slot. In a font with
+  proportional digits (a "1" narrower than a "0") centring the whole string made the clock change width on
+  every tick and shift around the middle; now nothing moves when digits change.
 
 ```
 src/
@@ -172,17 +184,19 @@ the relevant `logs\*.log` lines, or just "works").
 - [x] It covers **every** monitor (clock centred on each) and the taskbar is hidden behind it. (Log: 4480x1440 window at (-1920,0), 2 monitors.)
 - [x] Text is sharp, not blurry (DPI scaling is handled). The display scaling % was not reported.
 - [x] Clock font: the thin Segoe UI Light look. (Log: `C:\WINDOWS\Fonts\segoeuil.ttf`.)
-- [ ] Fireflies drift slowly and smoothly; no tearing, stutter or visible trails.
+- [x] Fireflies drift slowly and smoothly; no tearing, stutter or visible trails. (Reported fine.)
+- [ ] The clock does not shift or change width when a digit changes (needs the fixed-grid layout; retest).
 - [x] Moving the mouse or pressing keys during the first 2 seconds does nothing.
 - [x] After 2 seconds a **key press** exits (this checks that the saver really got keyboard focus) and so does a
       **real mouse move**. (Log: `exit on key`, `exit on mouse_move`.)
 - [x] A **click** exits, and a tiny 1-2 pixel nudge does not.
-- [ ] After exit, windows and the taskbar are exactly as before, and no `python` process remains in Task Manager.
+- [x] After exit, windows and the taskbar are exactly as before (reported fine), and the saver process ends
+      (`logs\tray.log`: `saver exited normally`).
 - [x] Double-clicking the tray icon starts only one saver. (The tray is hidden once the saver is up, so
       a second click can only happen in the first fraction of a second.)
 - [ ] Streamed via Apollo/Artemis: the saver shows on the stream and input from the client exits it.
-- [ ] Note the saver's CPU % in Task Manager after a minute (not measured on Windows yet; the design
-      aims for low single digits, but please report the real number and your monitor setup).
+- [ ] CPU and memory: run the saver for at least 70 seconds, then send the `perf:` lines from `logs\saver.log`
+      (not measured on Windows yet; the design aims for low single digits). Mention your monitor setup.
 
 **Keep-awake and remote sleep (phase 3, not yet written)**
 - [ ] With the Windows sleep timer set low (e.g. 1 minute) and a large transfer running, the PC
@@ -192,7 +206,8 @@ the relevant `logs\*.log` lines, or just "works").
       Keep-awake must only block *idle* sleep, never this deliberate command.
 
 **Soak (acceptance criterion)**
-- [ ] After 8 hours up: no crash, no visible slowdown; tray memory modest (Task Manager).
+- [ ] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5
+      minutes) and, with the saver left running, in the `perf:` lines in `saver.log` (every minute).
 
 ## Troubleshooting
 

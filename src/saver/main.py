@@ -20,9 +20,14 @@ from enum import Enum
 
 import applog
 import config
+import perfstats
 import winapi
 from saver import exitpolicy
 from saver.render import FPS, Layout, Rect, Renderer, plan_layout
+
+
+PERF_FIRST_REPORT_SECONDS = 10  # first CPU/memory line soon, so a short test still gets one
+PERF_REPORT_EVERY_SECONDS = 60  # then once a minute: ~480 lines over 8 hours
 
 
 class Mode(Enum):
@@ -128,6 +133,12 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
         pygame.display.flip()
         log.info("saver running (%d fps cap, grace %.1fs)", FPS, cfg.grace_seconds)
 
+        # The saver covers the screen, so it reports its own CPU and memory to the log:
+        # once soon after starting (short tests), then once a minute (the 8-hour soak).
+        sampler = perfstats.ProcessSampler()
+        frames = perfstats.FrameStats()
+        next_report = started + PERF_FIRST_REPORT_SECONDS
+
         frame_clock = pygame.time.Clock()
         running = True
         while running:
@@ -143,8 +154,16 @@ def run_saver(cfg: config.Config, windowed: bool, log) -> int:
                     break  # one event is enough; the rest of this batch must not log again
             if not running:
                 break
+            work_started = time.perf_counter()
             pygame.display.update(renderer.frame(datetime.now(), (now - started) * cfg.animation_speed))
+            frames.add((time.perf_counter() - work_started) * 1000)
+            if now >= next_report:
+                log.info("perf: %s; %s", perfstats.format_sample(sampler.sample(), sampler.cores), frames.summary())
+                next_report = now + PERF_REPORT_EVERY_SECONDS
             frame_clock.tick(FPS)
+        total = sampler.total()
+        if total is not None:
+            log.info("perf over the whole run (%.0f s): %s", total.seconds, perfstats.format_sample(total, sampler.cores))
         return 0
     finally:
         pygame.quit()

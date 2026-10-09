@@ -120,6 +120,46 @@ def monitor_rects() -> list[MonitorRect]:
     return found
 
 
+class _PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_ulong),  # DWORD (32-bit on Windows)
+        ("PageFaultCount", ctypes.c_ulong),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+    ]
+
+
+def process_memory_mb() -> float | None:
+    """This process's working set in MB: the number Task Manager shows as "Memory".
+
+    None if it cannot be read. Off Windows it reads /proc (Linux) so the same
+    logging works in development.
+    """
+    if IS_WINDOWS:
+        counters = _PROCESS_MEMORY_COUNTERS()
+        counters.cb = ctypes.sizeof(counters)
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p  # a 64-bit handle must not be truncated
+        psapi = ctypes.windll.psapi
+        psapi.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.POINTER(_PROCESS_MEMORY_COUNTERS), ctypes.c_ulong]
+        if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.pointer(counters), counters.cb):
+            return None
+        return counters.WorkingSetSize / (1024 * 1024)
+    try:
+        import os
+
+        with open("/proc/self/statm", encoding="ascii") as f:
+            return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / (1024 * 1024)
+    except (OSError, ValueError, IndexError, AttributeError):
+        return None
+
+
 def allow_set_foreground(pid: int) -> None:
     """Let another process take the foreground (called by the tray for the saver).
 

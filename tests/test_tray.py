@@ -85,6 +85,19 @@ def test_a_failing_menu_action_is_logged_not_raised(fake_pystray, monkeypatch):
     start.action(FakeIcon.last, start)  # must not propagate into pystray's thread
 
 
+def test_tray_reports_its_own_cpu_and_memory_until_it_exits(fake_pystray, monkeypatch):
+    started = {}
+
+    def fake_start_reporter(log, label, first_after, every, stop):
+        started.update(label=label, first=first_after, every=every, stop=stop)
+
+    monkeypatch.setattr(tray.perfstats, "start_reporter", fake_start_reporter)
+    tray.run_tray()
+    assert started["label"] == "tray"
+    assert (started["first"], started["every"]) == (60, 300)
+    assert started["stop"].is_set(), "the reporting thread must be told to stop when the tray exits"
+
+
 def test_second_instance_exits_quietly_without_building_an_icon(fake_pystray, monkeypatch):
     monkeypatch.setattr(tray.winapi, "acquire_single_instance", lambda name: None)
     assert tray.run_tray() == 0
