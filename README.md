@@ -14,13 +14,13 @@ on the Ice Cavern hub.
 > key, mouse move or click, with the 2 s grace period and the tiny-nudge threshold; one saver only
 > on a double-click; and, after fixes, no visible banding on the 1440p monitor and a clock that
 > stays put as its digits change; the second-instance guard and Exit. Not yet confirmed:
-> autostart, streaming and the 8-hour soak
+> streaming and the 8-hour soak. Autostart is confirmed too, so phase 1 is done
 > (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
 | --- | --- | --- |
-| 1 | Tray skeleton: icon, menu, autostart | icon, tooltip, menu, Settings, Exit and the second-instance guard confirmed; autostart still to test |
+| 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
 | 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | not started |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
@@ -190,8 +190,10 @@ the relevant `logs\*.log` lines, or just "works").
       already running; exiting`; the guard returns before any icon code runs.)
 - [x] **Exit** removes the icon and the `pythonw`/`python` process ends. (`tray.log`: `tray stopped`;
       `Get-Process python, pythonw` printed nothing afterwards.)
-- [ ] `--install-autostart`, then sign out and in: the icon is back, and "Saria's Song" is listed in
-      Task Manager > Startup apps. `--uninstall-autostart` removes it.
+- [x] `--install-autostart`, then sign out and in: the icon is back. `--uninstall-autostart` removes it.
+      (Reported working. The shortcut was inspected: target `...\.venv\Scripts\pythonw.exe`, arguments
+      `"...\src\tray.py"`, working directory = the repo. It points at this repo folder, so moving the repo
+      breaks it until `--install-autostart` is run again.)
 
 **Saver (phase 2)**
 - [x] Left-click the icon: the saver is on screen in about a second. (Logs: about 0.25 s from spawn to running, five runs.)
