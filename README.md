@@ -22,7 +22,7 @@ on the Ice Cavern hub.
 | --- | --- | --- |
 | 1 | Tray skeleton: icon, menu, autostart | **confirmed on Spirit Temple** (icon, tooltip, menu, Settings, Exit, second-instance guard, autostart) |
 | 2 | Minimal saver: clock + ambient animation, exits on input, `/s`, subprocess | working on Spirit Temple; see checklist for what is left |
-| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | written, awaiting Windows test |
+| 3 | Keep-awake (`SetThreadExecutionState`) and the remote-sleep test | request confirmed with `powercfg /requests`; sleep-timer, transfer and remote-sleep tests still to do |
 | 4 | Config modes: `text`, `slideshow`, `mixed` | not started (config file and grace period exist) |
 | 5 | PyInstaller exe, startup wiring, install/uninstall steps | not started |
 | 6 | Stretch: live transfer rates with `psutil` | not started |
@@ -220,7 +220,7 @@ The saver holds `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` wh
 clears it on exit (`logs\saver.log`: `keep-awake on` / `keep-awake off`). It blocks idle sleep only. It
 does not force the monitors on, and does not touch power plans or the registry. A crash releases it
 automatically (Windows drops the request when the thread dies).
-- [ ] **Quick proof it is in effect.** The saver covers the screen and any input closes it, so you cannot
+- [x] **Quick proof it is in effect.** The saver covers the screen and any input closes it, so you cannot
       type while it is up: start a delayed snapshot first, then launch the saver. In an **administrator**
       PowerShell run `Start-Sleep 25; powercfg /requests | Out-File $HOME\requests-during.txt`, then click the
       tray icon and leave the PC alone for 35 seconds before pressing a key. Afterwards
@@ -230,7 +230,8 @@ automatically (Windows drops the request when the thread dies).
       *First run on Spirit Temple (2026-10-09) found the entry under DISPLAY and nothing under SYSTEM:
       SDL's own request to keep the display on had replaced keep-awake's. Fixed by telling SDL to allow the
       screensaver (`SDL_VIDEO_ALLOW_SCREENSAVER`, `set_allow_screensaver`) and re-asserting the request every
-      minute; this item needs to be re-run to confirm.*
+      minute. **Re-run after the fix, confirmed:** SYSTEM shows the `.venv` `pythonw.exe`, DISPLAY shows
+      nothing, and `saver.log` says `keep-awake on (previous state 0x80000000)`.*
 - [ ] **Transfers survive.** Set Windows' sleep timer low (Settings > System > Power: Sleep after 1 minute on
       mains). Start a large torrent download and a large Google Drive upload (the Drive app), start the saver,
       leave it 30+ minutes and do not touch the PC. The PC stays awake and neither transfer stalls or pauses.
