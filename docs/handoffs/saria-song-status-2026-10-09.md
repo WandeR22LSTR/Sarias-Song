@@ -96,7 +96,7 @@ Proposed slices are in the design doc (4.0 experiments, 4.1 modifier-only keys s
 
 ## Other open items
 
-- The **8-hour soak** (leave the saver running and read the `perf:` lines in the morning).
+- The **8-hour soak** (leave the saver running; afterwards run `.\.venv\Scripts\python.exe .\src\soakreport.py`, steps in the README under "Soak").
 - Which of the original handoff's open questions remain: none blocking. Streaming (Apollo, Artemis on a Mac) and
   transfer clients (torrent and Google Drive upload) are answered.
 - The optional shortened-sleep-timer test in the README is unrun (the PC is meant to never sleep).

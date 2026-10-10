@@ -269,6 +269,22 @@ automatically (Windows drops the request when the thread dies).
 - [ ] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5
       minutes) and, with the saver left running, in the `perf:` lines in `saver.log` (every minute).
 
+  *After the soak* (from the repo folder, in PowerShell):
+
+  1. Don't restart the tray or the saver first: a restart starts a new log run. Wake the PC with the mouse
+     (the saver closes, which ends the run cleanly).
+  2. `.\.venv\Scripts\python.exe .\src\soakreport.py` prints one block per saver run in `logs\saver.log`: how
+     long it lasted, how it ended, memory first/last/lowest/highest and at about each hour, CPU, and the
+     slowest frame. The long block is the soak. "NO exit line" means the saver died or was killed.
+  3. `Select-String -Path .\logs\tray.log -Pattern "tray perf" | Select-Object -First 2` and `-Last 2`
+     (the tray's own memory), and `Select-String -Path .\logs\tray.log -Pattern "saver exited|ERROR|CRITICAL"`.
+  4. Check `logs\saver-stderr.log` is empty (or has no new traceback), and note what the screen looked like
+     when you walked up to it: clock ticking, fireflies moving.
+
+  Pass if: one long run, ended by your input, memory about flat (a few MB of drift is normal, a steady
+  climb of tens of MB is a leak), CPU near 18%, no traceback. Each log rotates at 256 KB; an 8-hour saver run
+  writes about 85 KB, so the whole soak sits in one file.
+
 ## Troubleshooting
 
 * **Nothing happens on click:** read `logs\tray.log`; it records every launch and exit code.
