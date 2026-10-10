@@ -16,9 +16,9 @@ on the Ice Cavern hub.
 > stays put as its digits change; the second-instance guard and Exit; autostart (so phase 1 is done);
 > and phase 3: the keep-awake request is held while the saver is up (`powercfg /requests`), a remote
 > "lullaby" still puts the PC to sleep with the saver on screen, and a torrent and a Google Drive upload
-> keep running. Not yet confirmed: streaming (now phase 4, see `docs/stream-privacy.md`)
-> and the 8-hour soak
-> (CPU measured: 18% of one core, 1.5% of the whole PC; memory flat over 34 minutes). See the
+> keep running; and the 8-hour soak (one run of 8 h 44 min, memory 116 to 122 MB and flat, CPU 18%, no
+> errors; details under the checklist's "Soak"). Not yet confirmed: streaming (now phase 4, see
+> `docs/stream-privacy.md`). See the
 > [Manual test checklist](#manual-test-checklist-spirit-temple); ticked items are the confirmed ones.
 
 | Phase | What | State |
@@ -266,8 +266,15 @@ automatically (Windows drops the request when the thread dies).
       move can be told from a real one.)
 
 **Soak (acceptance criterion)**
-- [ ] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5
+- [x] After 8 hours up: no crash, no visible slowdown. Memory stays flat in the `tray perf:` lines (every 5
       minutes) and, with the saver left running, in the `perf:` lines in `saver.log` (every minute).
+      (Luca, 2026-10-10, from `soakreport.py` and the logs: one saver run, 21:46 to 06:31, 8 h 44 min, 525
+      `perf:` lines, ended by `mouse_move` when he woke the PC. Saver memory 116 to 122 MB: it sat at 116-117
+      and rose about 5 MB a few times, returning each time, so no climb. CPU averaged 18.2% of one core,
+      highest minute 19.8%. The tray went from 31 MB to 19 MB at 0.0% CPU. `saver-stderr.log` empty; no
+      ERROR or CRITICAL in `tray.log`. One minute had a slowest frame of 114 ms against a 33 ms budget, a
+      one-off hitch that the numbers say did not recur as a slowdown. What the screen looked like when he
+      woke it was not reported, so "no visible slowdown" rests on the numbers.)
 
   *After the soak* (from the repo folder, in PowerShell):
 

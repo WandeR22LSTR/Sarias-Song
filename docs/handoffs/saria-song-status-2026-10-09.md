@@ -38,7 +38,7 @@ yet and no PR, because the remote was empty and Luca has not chosen how to handl
 | Phase | What | State |
 | --- | --- | --- |
 | 1 | Tray: icon, menu, autostart | done, confirmed on Spirit Temple |
-| 2 | Saver: clock, fireflies, exit rules, multi-monitor | done, confirmed (streaming and the 8-hour soak still open) |
+| 2 | Saver: clock, fireflies, exit rules, multi-monitor | done, confirmed, including the 8-hour soak (streaming still open) |
 | 3 | Keep-awake, remote sleep, transfers | done, confirmed |
 | 4 | **Apollo / Artemis stream awareness** | design stage; the input probe is written and waiting to be run |
 | 5 | Packaging, install/uninstall, settings GUI, technical features | not started |
@@ -96,7 +96,7 @@ Proposed slices are in the design doc (4.0 experiments, 4.1 modifier-only keys s
 
 ## Other open items
 
-- The **8-hour soak** (leave the saver running; afterwards run `.\.venv\Scripts\python.exe .\src\soakreport.py`, steps in the README under "Soak").
+- The **8-hour soak** is done and passed (2026-10-10, 8 h 44 min, memory flat at 116 to 122 MB, CPU 18%); see the README's "Soak". Use `src/soakreport.py` for any later long run.
 - Which of the original handoff's open questions remain: none blocking. Streaming (Apollo, Artemis on a Mac) and
   transfer clients (torrent and Google Drive upload) are answered.
 - The optional shortened-sleep-timer test in the README is unrun (the PC is meant to never sleep).
